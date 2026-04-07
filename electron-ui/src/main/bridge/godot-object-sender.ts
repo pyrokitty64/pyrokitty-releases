@@ -20,7 +20,9 @@ import type { MaterialResolver } from '../materials/material-resolver';
 import type { ObjectReadinessTracker } from './object-readiness-tracker';
 
 export class GodotObjectSender {
-  private deferredTextures = new Map<string, any>();
+  /** Deferred objects: uuid → parentUuid ('' for roots, parentUuid for children) */
+  private deferredTextures = new Map<string, string>();
+  private sweepInProgress = false;
   /** Children waiting for their parent to be tracked before sending */
   // pendingChildren removed — readiness tracker parent ordering handles child gating
   private textureUpdateSubs = new Map<string, Subscription>();
@@ -221,6 +223,10 @@ export class GodotObjectSender {
     const pos = obj.Position;
     if (!pos) return;
 
+    // Mark tracked early — handleMaterialReady checks this during synchronous
+    // cache-hit callbacks from requestMaterials(), which runs later in this function.
+    this.trackedObjects.add(objUuid);
+
     // Children proceed even if parent isn't tracked yet — the readiness tracker's
     // parent ordering gate holds the object_render message until the parent is emitted.
     // This lets textures/meshes download while waiting for the parent.
@@ -237,7 +243,7 @@ export class GodotObjectSender {
             const dx = worldPos.x - botPos.x, dy = worldPos.y - botPos.y, dz = worldPos.z - botPos.z;
             const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist > this.TEXTURE_FETCH_RANGE) {
-              this.deferredTextures.set(objUuid, obj);
+              this.deferredTextures.set(objUuid, '');
               this.trackedObjects.add(objUuid);
               return;
             }
@@ -248,7 +254,7 @@ export class GodotObjectSender {
 
     // Skip children of deferred (far) root prims — they'd be invisible anyway
     if (parentUuid !== '' && this.deferredTextures.has(parentUuid)) {
-      this.deferredTextures.set(objUuid, obj);
+      this.deferredTextures.set(objUuid, parentUuid);
       this.trackedObjects.add(objUuid);
       return;
     }
@@ -330,8 +336,6 @@ export class GodotObjectSender {
         console.log(`[Animesh] No buffered animations for ${objUuid.slice(0, 8)} (ObjectAnimation not yet received)`);
       }
     }
-    this.trackedObjects.add(objUuid);
-
     // Subscribe to live texture changes
     if (obj.onTextureUpdate) {
       const texSub = obj.onTextureUpdate.subscribe(() => this.materialResolver.handleObjectTextureUpdate(obj));
@@ -456,80 +460,118 @@ export class GodotObjectSender {
     return null;
   }
 
-  /** Sweep for deleted objects */
-  sweepDeletedObjects(): void {
-    try {
-      for (const uuid of this.trackedObjects) {
-        const obj = this.findObjectByUUID(uuid);
-        if (!obj || obj.deleted) {
-          this.send({ type: 'object_kill', uuid });
-          this.trackedObjects.delete(uuid);
-          this.textureUpdateSubs.get(uuid)?.unsubscribe();
-          this.textureUpdateSubs.delete(uuid);
-          this.animationManager.cleanupUuid(uuid);
-          this.avatarManager?.removeBakeObject(uuid);
-          this.readinessTracker?.remove(uuid);
-        }
-      }
-    } catch { /* bot may be disconnected */ }
-  }
-
-  /** Promote deferred textures for objects now within fetch range */
-  sweepDeferredTextures(): void {
-    if (this.deferredTextures.size === 0) return;
+  /**
+   * Combined sweep: deleted-object cleanup + deferred-texture promotion.
+   * Async with periodic setImmediate yields to keep the event loop responsive.
+   *
+   * Optimization: deferred children whose parent is still deferred are skipped
+   * entirely (just a Map.has check) — avoids 40-50k findObjectByUUID calls on mainland.
+   */
+  async sweepTrackedObjects(): Promise<void> {
+    if (this.trackedObjects.size === 0) return;
+    if (this.sweepInProgress) return;
+    this.sweepInProgress = true;
     try {
       const botPos = this.getBotPosition();
-      if (!botPos) return;
+      const rangeSq = this.TEXTURE_FETCH_RANGE * this.TEXTURE_FETCH_RANGE;
 
-      let promoted = 0;
+      // Collect mutations — don't modify sets during iteration
+      const toKill: string[] = [];
+      const toCleanDeferred: string[] = [];
+      const toPromoteRoot: string[] = [];
+      const toPromoteChild: string[] = [];
 
-      // Pass 1: promote root prims within range
-      for (const [uuid, _obj] of this.deferredTextures) {
-        const live = this.findObjectByUUID(uuid);
-        if (!live || live.deleted) {
-          this.deferredTextures.delete(uuid);
-          continue;
+      let lastYield = Date.now();
+
+      for (const uuid of this.trackedObjects) {
+        // Yield every ~4ms to let input/network through
+        const now = Date.now();
+        if (now - lastYield >= 4) {
+          await new Promise<void>(r => setImmediate(r));
+          lastYield = Date.now();
         }
 
-        const worldPos = this.getWorldPosition(live);
-        if (!worldPos) continue; // child prim — handled in pass 2
-        const dx = worldPos.x - botPos.x, dy = worldPos.y - botPos.y, dz = worldPos.z - botPos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= this.TEXTURE_FETCH_RANGE) {
-          this.deferredTextures.delete(uuid);
-          this.trackedObjects.delete(uuid);
-          this.sendObject(live, '');
-          promoted++;
+        const deferredParent = this.deferredTextures.get(uuid);
+        if (deferredParent !== undefined) {
+          // --- DEFERRED OBJECT ---
+          if (deferredParent !== '') {
+            // Child — skip entirely if parent still deferred (can't promote)
+            if (this.deferredTextures.has(deferredParent)) continue;
+            // Parent was promoted or killed — check this child
+            toPromoteChild.push(uuid);
+            continue;
+          }
+
+          // Root prim — check distance (skip sqrt with squared comparison)
+          if (!botPos) continue;
+          const live = this.findObjectByUUID(uuid);
+          if (!live || live.deleted) {
+            toCleanDeferred.push(uuid);
+            continue;
+          }
+          const worldPos = this.getWorldPosition(live);
+          if (!worldPos) continue;
+          const dx = worldPos.x - botPos.x, dy = worldPos.y - botPos.y, dz = worldPos.z - botPos.z;
+          if (dx * dx + dy * dy + dz * dz <= rangeSq) {
+            toPromoteRoot.push(uuid);
+          }
+        } else {
+          // --- SENT OBJECT — check if deleted ---
+          const live = this.findObjectByUUID(uuid);
+          if (!live || live.deleted) {
+            toKill.push(uuid);
+          }
         }
       }
 
-      // Pass 2: promote children whose root is no longer deferred
-      for (const [uuid, _obj] of this.deferredTextures) {
+      // --- Apply mutations ---
+
+      for (const uuid of toKill) {
+        this.send({ type: 'object_kill', uuid });
+        this.trackedObjects.delete(uuid);
+        this.textureUpdateSubs.get(uuid)?.unsubscribe();
+        this.textureUpdateSubs.delete(uuid);
+        this.animationManager.cleanupUuid(uuid);
+        this.avatarManager?.removeBakeObject(uuid);
+        this.readinessTracker?.remove(uuid);
+      }
+
+      for (const uuid of toCleanDeferred) {
+        this.deferredTextures.delete(uuid);
+        this.trackedObjects.delete(uuid);
+      }
+
+      for (const uuid of toPromoteRoot) {
         const live = this.findObjectByUUID(uuid);
         if (!live || live.deleted) {
           this.deferredTextures.delete(uuid);
+          this.trackedObjects.delete(uuid);
           continue;
         }
-        if (!live.ParentID || live.ParentID === 0) continue; // root — already handled
-        // Find parent UUID
-        let parentUuid = '';
-        try {
-          const region = live.region ?? this.bot.currentRegion;
-          const parent = region?.objects?.getObjectByLocalID(live.ParentID);
-          parentUuid = parent?.FullID?.toString() || '';
-        } catch { /* */ }
-        if (parentUuid && !this.deferredTextures.has(parentUuid)) {
-          this.deferredTextures.delete(uuid);
-          this.trackedObjects.delete(uuid);
-          this.sendObject(live, parentUuid);
-          promoted++;
-        }
+        this.deferredTextures.delete(uuid);
+        this.trackedObjects.delete(uuid); // sendObject re-adds
+        this.sendObject(live, '');
       }
 
-      if (promoted > 0) {
-        console.log(`[GodotBridge] Deferred sweep: promoted=${promoted} remaining=${this.deferredTextures.size}`);
+      for (const uuid of toPromoteChild) {
+        const live = this.findObjectByUUID(uuid);
+        if (!live || live.deleted) {
+          this.deferredTextures.delete(uuid);
+          this.trackedObjects.delete(uuid);
+          continue;
+        }
+        const parentUuid = this.deferredTextures.get(uuid) || '';
+        this.deferredTextures.delete(uuid);
+        this.trackedObjects.delete(uuid); // sendObject re-adds
+        this.sendObject(live, parentUuid);
+      }
+
+      const promoted = toPromoteRoot.length + toPromoteChild.length;
+      if (promoted > 0 || toKill.length > 0) {
+        console.log(`[GodotBridge] Sweep: promoted=${promoted} killed=${toKill.length} deferred=${this.deferredTextures.size}`);
       }
     } catch { /* bot may be disconnected */ }
+    finally { this.sweepInProgress = false; }
   }
 
   get deferredCount(): number {

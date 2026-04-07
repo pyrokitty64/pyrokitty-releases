@@ -10,7 +10,10 @@ import { SetAlwaysRunMessage } from '../../../node-metaverse/dist/lib/classes/me
 import { RequestPayPriceMessage } from '../../../node-metaverse/dist/lib/classes/messages/RequestPayPrice';
 import type { PayPriceReplyMessage } from '../../../node-metaverse/dist/lib/classes/messages/PayPriceReply';
 import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
+import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
 import { FilterResponse } from '../../../node-metaverse/dist/lib/enums/FilterResponse';
+import type { ScriptDialogEvent } from '../../../node-metaverse/dist/lib/events/ScriptDialogEvent';
+import type { LureEvent } from '../../../node-metaverse/dist/lib/events/LureEvent';
 import type { SendFn } from './godot-bridge-types';
 
 const CLICK_ACTION_SIT = 1;
@@ -22,6 +25,8 @@ export class GodotInputHandler {
   private _sittingOnLocalId = 0;
   private _sitPosition: number[] | null = null;
   private _sitRotation: number[] | null = null;
+  private _pendingDialogs = new Map<string, ScriptDialogEvent>();
+  private _pendingLures = new Map<string, LureEvent>();
 
   constructor(private bot: Bot, private send: SendFn) {}
 
@@ -479,5 +484,75 @@ export class GodotInputHandler {
       stCoord: new Vector3(st.x || 0, st.y || 0, 0),
       uvCoord: new Vector3(st.x || 0, st.y || 0, 0),
     };
+  }
+
+  // ─── Script Dialog ───────────────────────────────────────
+
+  storeScriptDialog(dialogId: string, event: ScriptDialogEvent): void {
+    this._pendingDialogs.set(dialogId, event);
+  }
+
+  async handleScriptDialogReply(msg: any): Promise<void> {
+    const dialogId: string = msg.dialogId;
+    const event = this._pendingDialogs.get(dialogId);
+    if (!event) {
+      console.warn(`[GodotBridge] script_dialog_reply: unknown dialogId ${dialogId}`);
+      return;
+    }
+    this._pendingDialogs.delete(dialogId);
+    try {
+      const buttonIndex: number = msg.buttonIndex;
+      await this.bot.clientCommands.comms.respondToScriptDialog(event, buttonIndex);
+      console.log(`[GodotBridge] ScriptDialog reply: button[${buttonIndex}]="${event.Buttons[buttonIndex]}"`);
+    } catch (e) {
+      console.error(`[GodotBridge] script_dialog_reply failed:`, e);
+    }
+  }
+
+  async handleScriptTextboxReply(msg: any): Promise<void> {
+    const dialogId: string = msg.dialogId;
+    const event = this._pendingDialogs.get(dialogId);
+    if (!event) {
+      console.warn(`[GodotBridge] script_textbox_reply: unknown dialogId ${dialogId}`);
+      return;
+    }
+    this._pendingDialogs.delete(dialogId);
+    try {
+      const text: string = msg.text || '';
+      await this.bot.clientCommands.comms.nearbyChat(text, ChatType.Normal, event.ChatChannel);
+      console.log(`[GodotBridge] ScriptTextbox reply on ch=${event.ChatChannel}: "${text.slice(0, 50)}"`);
+    } catch (e) {
+      console.error(`[GodotBridge] script_textbox_reply failed:`, e);
+    }
+  }
+
+  // ─── Teleport Offers ─────────────────────────────────────
+
+  storeTeleportOffer(offerId: string, event: LureEvent): void {
+    this._pendingLures.set(offerId, event);
+  }
+
+  async handleNotificationAction(msg: any): Promise<void> {
+    const notifId: string = msg.notificationId;
+    const action: string = msg.action;
+
+    // Check if it's a teleport offer
+    const lure = this._pendingLures.get(notifId);
+    if (lure) {
+      this._pendingLures.delete(notifId);
+      if (action === 'accept') {
+        try {
+          await this.bot.clientCommands.teleport.acceptTeleport(lure);
+          console.log(`[GodotBridge] Accepted teleport from "${lure.fromName}"`);
+        } catch (e) {
+          console.error(`[GodotBridge] acceptTeleport failed:`, e);
+        }
+      } else {
+        console.log(`[GodotBridge] Declined teleport from "${lure.fromName}"`);
+      }
+      return;
+    }
+
+    console.warn(`[GodotBridge] notification_action: unknown notificationId ${notifId}`);
   }
 }

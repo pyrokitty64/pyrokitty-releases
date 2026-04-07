@@ -101,7 +101,7 @@ export const objectTools: ToolDef[] = [
       type: 'object',
       properties: {
         pattern: { type: 'string', description: 'Glob pattern to match object names (e.g. "*keyword*")' },
-        timeout: { type: 'number', description: 'Max ms to keep retrying if no results (default: 10000). Objects may still be loading after login/teleport. Use 0 for single attempt.' },
+        timeout: { type: 'number', description: 'Max ms to keep retrying if no results (default: 10000). Objects may still be loading after login/teleport.' },
       },
       required: ['pattern'],
     },
@@ -127,7 +127,7 @@ export const objectTools: ToolDef[] = [
       type: 'object',
       properties: {
         uuid: { type: 'string', description: 'Object UUID to look up' },
-        timeout: { type: 'number', description: 'Max ms to wait for the object to appear (default: 10000). Use 0 for immediate lookup only.' },
+        timeout: { type: 'number', description: 'Max ms to wait for the object to appear (default: 10000).' },
       },
       required: ['uuid'],
     },
@@ -179,6 +179,22 @@ export const objectTools: ToolDef[] = [
       } catch (err: any) {
         return { content: [{ type: 'text', text: `Failed to get textures: ${err.message}` }], isError: true };
       }
+    },
+  },
+  {
+    name: 'sl_test_asset_download',
+    description: 'Test downloading an asset by UUID. Returns size on success or error message on failure.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        uuid: { type: 'string', description: 'Asset UUID' },
+        type: { type: 'string', enum: ['texture', 'material'], description: 'Asset type (default: texture)' },
+      },
+      required: ['uuid'],
+    },
+    handler: async (args, bot) => {
+      const result = await bot.testAssetDownload(args.uuid as string, (args.type as 'texture' | 'material') || 'texture');
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
     },
   },
   {

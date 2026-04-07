@@ -8,8 +8,8 @@
 
 import type { Bot } from '../../../node-metaverse/dist/lib';
 import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
-import type { ObjectAnimationMessage } from '../../../node-metaverse/dist/lib/classes/messages/ObjectAnimation';
-import type { AvatarAnimationMessage } from '../../../node-metaverse/dist/lib/classes/messages/AvatarAnimation';
+/** Fields we actually read from animation circuit messages (may be missing on truncated packets). */
+type AnimationPacket = { Sender?: { ID?: { toString(): string } }; AnimationList?: { AnimID: { toString(): string }; AnimSequenceID: number }[] };
 import type { AnimationFetchQueue } from '../assets/animation-fetch-queue';
 import type { SendFn } from './godot-bridge-types';
 
@@ -81,10 +81,11 @@ export class GodotAnimationManager {
   subscribeToObjectAnimation(): { unsubscribe: () => void } {
     return this.bot.subscribeToCircuitMessages([
       Message.ObjectAnimation,
-    ], (packet: any) => {
+    ], (packet) => {
       try {
-        const msg = packet.message as ObjectAnimationMessage;
-        const senderUuid = msg.Sender.ID.toString();
+        const msg = packet.message as unknown as AnimationPacket;
+        const senderUuid = msg.Sender?.ID?.toString();
+        if (!senderUuid || !msg.AnimationList) return;
         const animations = msg.AnimationList.map(a => ({
           animId: a.AnimID.toString(),
           sequenceId: a.AnimSequenceID,
@@ -111,10 +112,11 @@ export class GodotAnimationManager {
   subscribeToAvatarAnimation(): { unsubscribe: () => void } {
     return this.bot.subscribeToCircuitMessages([
       Message.AvatarAnimation,
-    ], (packet: any) => {
+    ], (packet) => {
       try {
-        const msg = packet.message as AvatarAnimationMessage;
-        const avatarId = msg.Sender.ID.toString();
+        const msg = packet.message as unknown as AnimationPacket;
+        const avatarId = msg.Sender?.ID?.toString();
+        if (!avatarId || !msg.AnimationList) return;
         const animations = msg.AnimationList.map(a => ({
           animId: a.AnimID.toString(),
           sequenceId: a.AnimSequenceID,

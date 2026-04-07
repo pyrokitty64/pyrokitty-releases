@@ -42,12 +42,12 @@ func _assert(condition: bool, msg: String) -> void:
 ## Create a minimal scene_manager stub with enough state for object_picker.
 ## Does NOT call _setup_id_buffer (deferred) — we test pure logic only.
 func _make_picker() -> RefCounted:
-	# Stub scene_manager with minimal interface
-	var sm := Node3D.new()
+	# Stub scene_manager with a script that has the required properties
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node3D\nvar objects: Dictionary = {}\nvar animesh_mesh_instances: Dictionary = {}\nvar _scenario: RID = RID()\n"
+	stub_script.reload()
+	var sm: Node3D = stub_script.new()
 	add_child(sm)
-	sm.set("objects", {})
-	sm.set("animesh_mesh_instances", {})
-	sm.set("_scenario", RID())
 
 	var picker = preload("res://src/object_picker.gd").new(sm)
 	return picker

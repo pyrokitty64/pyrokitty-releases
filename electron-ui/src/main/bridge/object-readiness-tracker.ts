@@ -9,15 +9,17 @@
  * Objects are keyed by UUID (not localId) for multi-region safety.
  */
 
-import { IMG_TRANSPARENT } from './godot-bridge-types';
+import {
+  TRANSPARENT_TEXTURES, SOLID_COLOR_TEXTURES, WATER_EXCLUSION_TEXTURES,
+} from './godot-bridge-types';
 import type { SendFn } from './godot-bridge-types';
 
-/** Unfetchable texture IDs that must never enter needsTextures — they are never downloaded. */
+/** Unfetchable texture IDs that must never enter needsTextures — they are never downloaded.
+ *  Must stay in sync with the skip checks in MaterialResolver.requestTexture(). */
 const UNFETCHABLE_TEXTURES = new Set([
-  IMG_TRANSPARENT,
-  '38b86f85-2575-52a9-a531-23108d8da837', // IMG_INVISIBLE
-  'e97cf410-8e61-7005-ec06-629eba4cd1fb', // IMG_WHITE
-  '5748decc-f629-461c-9a36-a35a221fe21f', // IMG_DEFAULT
+  ...TRANSPARENT_TEXTURES,
+  ...SOLID_COLOR_TEXTURES,
+  ...WATER_EXCLUSION_TEXTURES,
 ]);
 
 interface PendingObject {
@@ -92,12 +94,14 @@ export class ObjectReadinessTracker {
         entry.texturesReady.add(tid);
       }
     }
-    // Pre-fill materials that already resolved (e.g. failed materials from earlier objects)
-    for (const mid of filteredMaterials) {
-      if (this.resolvedMaterials.has(mid)) {
-        entry.materialsReady.add(mid);
-      }
-    }
+    // NOTE: Do NOT pre-fill materials from resolvedMaterials here.
+    // Unlike textures (whose face data is already in renderMsg), PBR material
+    // faces are DEFERRED — their face data is only patched in by
+    // handleMaterialReady → onResolved → updatePendingFaces. Pre-filling the
+    // material gate would cause checkAndEmit to ship the object before
+    // requestMaterials() can fire a synchronous cache-hit callback to patch
+    // the pending face data. Materials are marked ready via the explicit
+    // onMaterialReady/onMaterialFailed callbacks instead.
     this.pending.set(uuid, entry);
 
     // Reverse index: mesh → objects (only if not already resolved)
@@ -204,8 +208,8 @@ export class ObjectReadinessTracker {
 
   /** Mark PBR material asset as resolved for all waiting objects. */
   onMaterialReady(materialUuid: string): void {
-    this.resolvedMaterials.add(materialUuid);
     const objectUuids = this.materialToObjects.get(materialUuid);
+    this.resolvedMaterials.add(materialUuid);
     if (!objectUuids) return;
     for (const uuid of objectUuids) {
       const entry = this.pending.get(uuid);

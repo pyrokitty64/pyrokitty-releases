@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GodotUpdateCoalescer, type UpdateCoalescerDeps } from '../bridge/godot-update-coalescer';
 
-function makeDeps(overrides?: Partial<UpdateCoalescerDeps>): UpdateCoalescerDeps {
+function makeDeps(overrides?: Partial<UpdateCoalescerDeps>) {
   return {
-    isTracked: vi.fn(() => true),
-    isAvatarTracked: vi.fn(() => true),
-    getLightInfo: vi.fn(() => null),
-    send: vi.fn(),
-    resendObject: vi.fn(),
+    isTracked: vi.fn((_uuid: string) => true),
+    isAvatarTracked: vi.fn((_id: string) => true),
+    getLightInfo: vi.fn((_obj: any) => null as any),
+    send: vi.fn((_msg: object) => {}),
+    resendObject: vi.fn((_obj: any) => {}),
+    trySendObject: vi.fn((_obj: any) => {}),
     ...overrides,
-  };
+  } satisfies UpdateCoalescerDeps;
 }
 
 describe('GodotUpdateCoalescer', () => {
@@ -107,7 +108,7 @@ describe('GodotUpdateCoalescer', () => {
 
       // Should batch both into one message
       expect(deps.send).toHaveBeenCalledOnce();
-      const call = deps.send.mock.calls[0][0] as any;
+      const call = vi.mocked(deps.send).mock.calls[0][0] as any;
       expect(call.type).toBe('object_update_batch');
       expect(call.objects).toHaveLength(2);
     });
@@ -124,7 +125,7 @@ describe('GodotUpdateCoalescer', () => {
 
       // Should only have one update (last wins due to map key)
       expect(deps.send).toHaveBeenCalledOnce();
-      const call = deps.send.mock.calls[0][0] as any;
+      const call = vi.mocked(deps.send).mock.calls[0][0] as any;
       expect(call.objects).toHaveLength(1);
     });
 
@@ -150,7 +151,7 @@ describe('GodotUpdateCoalescer', () => {
 
       // Should send two messages: physics and statics
       expect(deps.send).toHaveBeenCalledTimes(2);
-      const types = deps.send.mock.calls.map((c: any) => c[0].type).sort();
+      const types = vi.mocked(deps.send).mock.calls.map((c: any) => c[0].type).sort();
       expect(types).toEqual(['object_update_batch', 'object_update_physics']);
     });
   });
@@ -193,9 +194,9 @@ describe('GodotUpdateCoalescer', () => {
 
       vi.advanceTimersByTime(16);
 
-      const avatarCall = deps.send.mock.calls.find((c: any) => c[0].type === 'avatar_update_batch');
+      const avatarCall = vi.mocked(deps.send).mock.calls.find((c: any) => c[0].type === 'avatar_update_batch');
       expect(avatarCall).toBeDefined();
-      expect(avatarCall![0].avatars).toHaveLength(2);
+      expect((avatarCall![0] as any).avatars).toHaveLength(2);
     });
 
     it('ignores untracked avatars', () => {
@@ -272,7 +273,7 @@ describe('GodotUpdateCoalescer', () => {
 
       vi.advanceTimersByTime(16);
 
-      const call = deps.send.mock.calls[0][0] as any;
+      const call = vi.mocked(deps.send).mock.calls[0][0] as any;
       const obj = call.objects[0];
       expect(obj.light).toBeNull();
     });
@@ -300,7 +301,7 @@ describe('GodotUpdateCoalescer', () => {
 
       vi.advanceTimersByTime(16);
 
-      const call = deps.send.mock.calls[0][0] as any;
+      const call = vi.mocked(deps.send).mock.calls[0][0] as any;
       expect(call.objects[0].light).toEqual(lightData);
     });
   });

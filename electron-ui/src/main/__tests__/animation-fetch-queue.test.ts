@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
 
 // Mock fs.promises — vi.hoisted ensures the object exists before vi.mock's hoisted factory runs
 const mockFsPromises = vi.hoisted(() => ({
-  access: vi.fn(() => Promise.reject(new Error('ENOENT'))),
+  access: vi.fn<() => Promise<void>>(() => Promise.reject(new Error('ENOENT'))),
   readFile: vi.fn(() => Promise.resolve('{}')),
   mkdir: vi.fn(() => Promise.resolve(undefined)),
   writeFile: vi.fn(() => Promise.resolve(undefined)),
@@ -52,7 +52,7 @@ vi.mock('../../../node-metaverse/dist/lib', () => ({
   AssetType: { Animation: 20 },
 }));
 
-import { AnimationFetchQueue, type AnimationData } from '../assets/animation-fetch-queue';
+import { AnimationFetchQueue, type AnimationData, type AnimationReadyCallback } from '../assets/animation-fetch-queue';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -83,12 +83,12 @@ function makeMockBot(downloadResult?: () => Promise<Buffer>) {
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('AnimationFetchQueue', () => {
-  let onReady: ReturnType<typeof vi.fn>;
+  let onReady: ReturnType<typeof vi.fn<AnimationReadyCallback>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
-    onReady = vi.fn();
+    onReady = vi.fn<AnimationReadyCallback>();
   });
 
   describe('initial state', () => {

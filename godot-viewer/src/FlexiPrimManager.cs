@@ -15,6 +15,19 @@ public partial class FlexiPrimManager : RefCounted
     const int BoneCount = 8;
     const float MaxTensionForce = 0.99f;
 
+    static readonly bool _debug = _InitDebug();
+    static bool _InitDebug()
+    {
+        var env = OS.GetEnvironment("PK_DEBUG");
+        if (string.IsNullOrEmpty(env)) return false;
+        foreach (var tag in env.Split(','))
+        {
+            var t = tag.Trim().ToLowerInvariant();
+            if (t == "all" || t == "flexi") return true;
+        }
+        return false;
+    }
+
     // ── Flexi parameters (immutable per-prim until rebuilt) ──────────────
     struct FlexiParams
     {
@@ -180,7 +193,7 @@ public partial class FlexiPrimManager : RefCounted
             _slots[objUuid] = new OutputSlot();
         }
 
-        GD.Print($"[FlexiCS] Created {objUuid[..Math.Min(8, objUuid.Length)]}: pos={worldPos} rot={worldRot} scale={primScale} bones={skeleton.GetBoneCount()} sec_len={sectionLength:F3} surfaces={riggedMesh.GetSurfaceCount()}");
+        if (_debug) GD.Print($"[FlexiCS] Created {objUuid[..Math.Min(8, objUuid.Length)]}: pos={worldPos} rot={worldRot} scale={primScale} bones={skeleton.GetBoneCount()} sec_len={sectionLength:F3} surfaces={riggedMesh.GetSurfaceCount()}");
 
         return root;
     }

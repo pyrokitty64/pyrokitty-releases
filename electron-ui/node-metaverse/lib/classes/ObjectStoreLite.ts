@@ -261,6 +261,12 @@ export class ObjectStoreLite implements IObjectStore
                                 if (textureEntry)
                                 {
                                     textureEntry.gltfMaterialOverrides = overrides;
+                                    // Notify listeners that material overrides changed —
+                                    // PBR faces may need re-resolution with the new inline data.
+                                    if (obj.onTextureUpdate)
+                                    {
+                                        obj.onTextureUpdate.next();
+                                    }
                                 }
                                 else
                                 {

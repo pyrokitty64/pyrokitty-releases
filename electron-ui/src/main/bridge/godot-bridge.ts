@@ -23,6 +23,8 @@ import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
 import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
 import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
 import { ChatSourceType } from '../../../node-metaverse/dist/lib/enums/ChatSourceType';
+import type { ScriptDialogEvent } from '../../../node-metaverse/dist/lib/events/ScriptDialogEvent';
+import type { LureEvent } from '../../../node-metaverse/dist/lib/events/LureEvent';
 import type { SceneManager, ViewerAdapter } from '../network/scene-manager';
 import { MeshFetchQueue } from '../assets/mesh-fetch-queue';
 import { initSkeletonData } from '../assets/mesh-converter';
@@ -130,6 +132,9 @@ export class GodotBridge extends EventEmitter {
   private sendBuffer: object[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Godot message log
+  private msgLogStream: fs.WriteStream | null = null;
+
   // Stats
   private killSweepTimer: ReturnType<typeof setInterval> | null = null;
   private electronStatsCounter = 0;
@@ -151,7 +156,8 @@ export class GodotBridge extends EventEmitter {
       (objectUuid, faceIndex, material) => {
         const godotFace = resolvedToGodotFace(faceIndex, material);
         // If object_render hasn't shipped yet, patch face and register PBR texture dependencies
-        if (this.readinessTracker?.updatePendingFaces(objectUuid, godotFace)) {
+        const patched = this.readinessTracker?.updatePendingFaces(objectUuid, godotFace);
+        if (patched) {
           // Add PBR textures as new dependencies so the tracker waits for them
           const newTexIds = new Set<string>();
           if (material.baseColorTexture) newTexIds.add(material.baseColorTexture);
@@ -159,7 +165,7 @@ export class GodotBridge extends EventEmitter {
           if (material.ormTexture) newTexIds.add(material.ormTexture);
           if (material.emissiveTexture) newTexIds.add(material.emissiveTexture);
           if (newTexIds.size > 0) {
-            this.readinessTracker.addTextures(objectUuid, newTexIds);
+            this.readinessTracker!.addTextures(objectUuid, newTexIds);
           }
           return;
         }
@@ -326,6 +332,11 @@ export class GodotBridge extends EventEmitter {
             this.ws = ws;
             this.setConnected(true);
             console.log(`[GodotBridge] WebSocket connected (attempt ${attempt})`);
+
+            // Open godot-messages log
+            const msgLogPath = path.join(app.getPath('userData'), 'godot-messages.log');
+            this.msgLogStream = fs.createWriteStream(msgLogPath, { flags: 'w' });
+            this.msgLogStream.write(`=== Godot messages log started ${new Date().toISOString()} ===\n`);
 
             ws.on('message', (data) => {
               try {
@@ -575,6 +586,15 @@ export class GodotBridge extends EventEmitter {
       case 'pay_confirm':
         this.inputHandler.handlePayConfirm(msg);
         break;
+      case 'script_dialog_reply':
+        this.inputHandler.handleScriptDialogReply(msg);
+        break;
+      case 'script_textbox_reply':
+        this.inputHandler.handleScriptTextboxReply(msg);
+        break;
+      case 'notification_action':
+        this.inputHandler.handleNotificationAction(msg);
+        break;
       case 'object_buy':
         console.log(`[GodotBridge] Buy requested for ${msg.uuid?.slice(0, 8)} (not yet implemented)`);
         break;
@@ -612,7 +632,9 @@ export class GodotBridge extends EventEmitter {
   /** Low-level WebSocket send — only called by flushSendBuffer */
   private sendRaw(msg: object): void {
     if (this.ws && this.connected) {
-      this.ws.send(JSON.stringify(msg));
+      const json = JSON.stringify(msg);
+      this.msgLogStream?.write(json + '\n');
+      this.ws.send(json);
     }
   }
 
@@ -881,7 +903,15 @@ export class GodotBridge extends EventEmitter {
     const chatSub = events.onNearbyChat.subscribe((event) => {
       try {
         const fromId = event.from?.toString() || '';
-        if (!fromId || !this.trackedAvatars.has(fromId)) return;
+        if (!fromId) return;
+
+        // Object chat doesn't need avatar tracking
+        if (event.sourceType === ChatSourceType.Object && event.message) {
+          this.send({ type: 'object_chat', objectId: fromId, message: event.message, objectName: event.fromName });
+          return;
+        }
+
+        if (!this.trackedAvatars.has(fromId)) return;
 
         if (event.chatType === ChatType.StartTyping) {
           this.send({ type: 'avatar_typing', avatarId: fromId, typing: true });
@@ -895,12 +925,55 @@ export class GodotBridge extends EventEmitter {
     });
     this.subscriptions.push(chatSub);
 
+    // Script dialogs (llDialog / llTextBox) → Godot
+    let dialogSeq = 0;
+    const dialogSub = events.onScriptDialog.subscribe((event: ScriptDialogEvent) => {
+      try {
+        const dialogId = `dlg_${Date.now()}_${dialogSeq++}`;
+        const isTextBox = event.Buttons.length === 1 && event.Buttons[0] === '!!llTextBox!!';
+
+        this.inputHandler.storeScriptDialog(dialogId, event);
+
+        this.send({
+          type: 'script_dialog',
+          dialogId,
+          objectId: event.ObjectID.toString(),
+          objectName: event.ObjectName,
+          ownerName: `${event.FirstName} ${event.LastName}`,
+          message: event.Message,
+          buttons: isTextBox ? [] : event.Buttons,
+          channel: event.ChatChannel,
+          isTextBox,
+        });
+        console.log(`[GodotBridge] ScriptDialog from "${event.ObjectName}" ch=${event.ChatChannel} buttons=${event.Buttons.length} textbox=${isTextBox}`);
+      } catch { /* ignore malformed dialog events */ }
+    });
+    this.subscriptions.push(dialogSub);
+
+    // Teleport offers (lure) → Godot
+    let lureSeq = 0;
+    const lureSub = events.onLure.subscribe((event: LureEvent) => {
+      try {
+        const offerId = `lure_${Date.now()}_${lureSeq++}`;
+
+        this.inputHandler.storeTeleportOffer(offerId, event);
+
+        this.send({
+          type: 'teleport_offer',
+          offerId,
+          fromName: event.fromName,
+          message: event.lureMessage || '',
+        });
+        console.log(`[GodotBridge] Teleport offer from "${event.fromName}"`);
+      } catch { /* ignore malformed lure events */ }
+    });
+    this.subscriptions.push(lureSub);
+
     // Kill sweep + deferred promotion: every 2s
     let memLogCounter = 0;
     this.killSweepTimer = setInterval(() => {
-      this.objectSender.sweepDeletedObjects();
+      void this.objectSender.sweepTrackedObjects();
       this.avatarManager.sweepAvatarDepartures();
-      this.objectSender.sweepDeferredTextures();
       this.readinessTracker?.sweepTimeouts();
 
       // Send electron stats to Godot every 2s (every tick)
@@ -919,7 +992,7 @@ export class GodotBridge extends EventEmitter {
     let objStoreSize: string | number = '?';
     try { objStoreSize = this.bot.currentRegion?.objects?.getNumberOfObjects?.() ?? '?'; } catch { /* bot disconnected */ }
     const tq = this.textureFetchQueue;
-    console.log(`[GodotBridge] Memory: rss=${mb(mem.rss)}MB heap=${mb(mem.heapUsed)}/${mb(mem.heapTotal)}MB ext=${mb(mem.external)}MB | objects=${objStoreSize} tracked=${this.trackedObjects.size} | tex: q=${tq?.queueDepth ?? '?'} active=${tq?.activeCount ?? '?'} done=${tq?.notifiedCount ?? '?'} fail=${tq?.failedCount ?? '?'} gpu=${tq?.gpuCompressCount ?? '?'}/${tq?.webpFallbackCount ?? '?'}wp decode: w=${tq?.decodePool?.workerCount ?? '?'} q=${tq?.decodePool?.queueDepth ?? '?'} active=${tq?.decodePool?.activeCount ?? '?'} gpuq: q=${tq?.gpuQueueDepth ?? '?'} active=${tq?.gpuQueueActive ?? '?'} | pbr: ${this.materialResolver.totalPbrFaceCount} faces | deferred: ${this.objectSender.deferredCount} pending: ${this.objectSender.readinessPendingCount}`);
+    console.log(`[GodotBridge] Memory: rss=${mb(mem.rss)}MB heap=${mb(mem.heapUsed)}/${mb(mem.heapTotal)}MB ext=${mb(mem.external)}MB | objects=${objStoreSize} tracked=${this.trackedObjects.size} | tex: q=${tq?.queueDepth ?? '?'} active=${tq?.activeCount ?? '?'} done=${tq?.notifiedCount ?? '?'} fail=${tq?.failedCount ?? '?'} gpu=${tq?.gpuCompressCount ?? '?'} cpu=${tq?.cpuCompressCount ?? '?'} decode: w=${tq?.decodePool?.workerCount ?? '?'} q=${tq?.decodePool?.queueDepth ?? '?'} active=${tq?.decodePool?.activeCount ?? '?'} gpuq: q=${tq?.gpuQueueDepth ?? '?'} active=${tq?.gpuQueueActive ?? '?'} | pbr: ${this.materialResolver.totalPbrFaceCount} faces | deferred: ${this.objectSender.deferredCount} pending: ${this.objectSender.readinessPendingCount}`);
   }
 
   /** Send electron-side fetch queue stats to Godot for the stats bar */
@@ -1136,6 +1209,10 @@ export class GodotBridge extends EventEmitter {
       this.textureFetchQueue = null;
     }
 
+    if (this.msgLogStream) {
+      this.msgLogStream.end();
+      this.msgLogStream = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

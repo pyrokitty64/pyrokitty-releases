@@ -88,6 +88,7 @@ export class BotManager {
   private maxRecentChat = 100;
   private cameraInterval: ReturnType<typeof setInterval> | null = null;
   private loginPromise: Promise<string> | null = null;
+  private _kickedMessage: string | null = null;
 
   get state(): BotState {
     return this._state;
@@ -124,6 +125,9 @@ export class BotManager {
    */
   async ensureConnected(): Promise<void> {
     if (this.isConnected) return;
+    if (this._kickedMessage) {
+      throw new Error(`Bot was disconnected: ${this._kickedMessage}. Use sl_login to reconnect.`);
+    }
     if (this.loginPromise) {
       await this.loginPromise;
       return;
@@ -194,6 +198,7 @@ export class BotManager {
       throw new Error(`Cannot login: state is ${this._state}`);
     }
 
+    this._kickedMessage = null;
     this._state = 'logging_in';
 
     try {
@@ -251,11 +256,6 @@ export class BotManager {
     this.recentIMs = [];
     this.recentChat = [];
     this._state = 'disconnected';
-  }
-
-  /** True if the bot was connected but got kicked (e.g. another client logged in). */
-  get wasKicked(): boolean {
-    return this._state === 'disconnected' && this.bot === null;
   }
 
   getStatus(): Record<string, unknown> {
@@ -825,13 +825,98 @@ export class BotManager {
       };
     };
 
+    // PBR material asset UUIDs per face (from renderMaterialData extra param)
+    const rmd = obj.extraParams?.renderMaterialData;
+    const pbrMaterialMap = new Map<number, string>();
+    if (rmd?.params?.length) {
+      for (const param of rmd.params) {
+        const matUuid = param.textureUUID?.toString();
+        if (matUuid && matUuid !== '00000000-0000-0000-0000-000000000000') {
+          pbrMaterialMap.set(param.textureIndex, matUuid);
+        }
+      }
+    }
+
+    // Inline GLTF material overrides per face
+    const gltfOverrides = te.gltfMaterialOverrides;
+    const inlineOverrideMap = new Map<number, Record<string, unknown>>();
+    if (gltfOverrides?.size) {
+      for (const [idx, override] of gltfOverrides) {
+        const entry: Record<string, unknown> = {};
+        if (override.textures?.length) {
+          const texNames = ['baseColor', 'normal', 'orm', 'emissive'];
+          for (let t = 0; t < override.textures.length; t++) {
+            const tid = override.textures[t]?.toString();
+            if (tid && tid !== '00000000-0000-0000-0000-000000000000') {
+              entry[`${texNames[t] ?? `tex${t}`}Texture`] = tid;
+            }
+          }
+        }
+        if (override.baseColor) entry.baseColor = override.baseColor;
+        if (override.metallicFactor !== undefined) entry.metallicFactor = override.metallicFactor;
+        if (override.roughnessFactor !== undefined) entry.roughnessFactor = override.roughnessFactor;
+        if (override.emissiveFactor) entry.emissiveFactor = override.emissiveFactor;
+        if (override.alphaMode !== undefined) entry.alphaMode = override.alphaMode;
+        if (override.alphaCutoff !== undefined) entry.alphaCutoff = override.alphaCutoff;
+        if (override.doubleSided !== undefined) entry.doubleSided = override.doubleSided;
+        if (Object.keys(entry).length > 0) inlineOverrideMap.set(idx, entry);
+      }
+    }
+
+    // Build face list: start with explicit te.faces, then fill gaps from default
+    // for any face index referenced by renderMaterialData or gltfOverrides
+    const allFaceIndices = new Set<number>();
+    for (let i = 0; i < te.faces.length; i++) allFaceIndices.add(i);
+    for (const idx of pbrMaterialMap.keys()) allFaceIndices.add(idx);
+    for (const idx of inlineOverrideMap.keys()) allFaceIndices.add(idx);
+
+    const faceList = Array.from(allFaceIndices).sort((a, b) => a - b).map(i => ({
+      face: i,
+      ...faceData(te.faces[i] ?? te.defaultTexture),
+      ...(pbrMaterialMap.has(i) ? { pbrMaterialId: pbrMaterialMap.get(i) } : {}),
+      ...(inlineOverrideMap.has(i) ? { gltfOverride: inlineOverrideMap.get(i) } : {}),
+    }));
+
     return {
       defaultTexture: te.defaultTexture ? faceData(te.defaultTexture) : undefined,
-      faces: te.faces.map((f: any, i: number) => ({
-        face: i,
-        ...faceData(f),
-      })),
+      faces: faceList,
     };
+  }
+
+  /** Try to download an asset by UUID and type. Returns size or error. For materials, also parses and returns PBR data. */
+  async testAssetDownload(uuid: string, type: 'texture' | 'material'): Promise<{ ok: boolean; size?: number; error?: string; parsed?: any }> {
+    await this.ensureConnected();
+    const assetType = type === 'material' ? AssetType.Material : AssetType.Texture;
+    try {
+      const buf = await this.bot!.clientCommands.asset.downloadAsset(assetType, uuid);
+      const result: any = { ok: true, size: buf?.length ?? 0 };
+      if (type === 'material' && buf && buf.length >= 20) {
+        try {
+          const { LLGLTFMaterial } = await import('../../electron-ui/node-metaverse/dist/lib/classes/LLGLTFMaterial.js');
+          const { LLGLTFMaterialOverride } = await import('../../electron-ui/node-metaverse/dist/lib/classes/LLGLTFMaterialOverride.js');
+          const gltfMat = new LLGLTFMaterial(buf);
+          result.rawGltf = gltfMat.data;
+          if (gltfMat.data) {
+            const override = LLGLTFMaterialOverride.fromFullMaterialJSON(JSON.stringify(gltfMat.data));
+            result.parsed = {
+              textures: override.textures,
+              baseColor: override.baseColor,
+              metallicFactor: override.metallicFactor,
+              roughnessFactor: override.roughnessFactor,
+              emissiveFactor: override.emissiveFactor,
+              alphaMode: override.alphaMode,
+              alphaCutoff: override.alphaCutoff,
+              doubleSided: override.doubleSided,
+            };
+          }
+        } catch (parseErr: any) {
+          result.parseError = parseErr?.message || String(parseErr);
+        }
+      }
+      return result;
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
   }
 
   /**
@@ -1050,6 +1135,9 @@ export class BotManager {
       if (this.cameraInterval) {
         clearInterval(this.cameraInterval);
         this.cameraInterval = null;
+      }
+      if (!event.requested) {
+        this._kickedMessage = event.message || 'Connection lost';
       }
       this.bot = null;
       this.friends.clear();

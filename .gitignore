@@ -165,3 +165,4 @@ electron-ui/scripts/test-object-loading.sh
 Hippolyzer
 TODO*.md
 *.local
+.vite

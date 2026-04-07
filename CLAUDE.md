@@ -74,8 +74,8 @@ See `docs/avatar-rendering.md` for skeleton architecture, animation system, shap
 ## Logs
 
 - **Firestorm Viewer**: `%APPDATA%\PyroKitty_x64\logs\PyroKitty.log`
-- **Godot Viewer**: `%APPDATA%\pyrokitty-ui\pyrokitty.log`
-- **Electron main process + voice sidecar**: `%APPDATA%\pyrokitty-ui\pyrokitty.log` (tee'd from console.log/warn/error; voice lines prefixed `[VoiceSidecar]`)
+- **Godot Viewer + Electron main process + voice sidecar**: `%APPDATA%\pyrokitty-ui\pyrokitty-<ISO-timestamp>.log` (e.g. `pyrokitty-2026-04-05T22-49-03-410.log`). New file per session. Voice lines prefixed `[VoiceSidecar]`.
+- **Godot raw messages**: `%APPDATA%\pyrokitty-ui\godot-messages.log`
 
 ## Voice Sidecar
 

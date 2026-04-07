@@ -46,7 +46,8 @@ InventoryFolder.cacheBasePath = path.join(app.getPath('userData'), 'asset-cache'
 // ── Global file logger ─────────────────────────────────────
 // Tee console.log/warn/error to a log file in userData
 {
-  const logPath = path.join(app.getPath('userData'), 'pyrokitty.log');
+  const launchStamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  const logPath = path.join(app.getPath('userData'), `pyrokitty-${launchStamp}.log`);
   const logStream = fs.createWriteStream(logPath, { flags: 'w' });
   logStream.write(`=== PyroKitty started ${new Date().toISOString()} ===\n`);
 

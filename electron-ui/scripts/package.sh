@@ -318,22 +318,6 @@ echo "Step 6: Packaging with electron-builder..."
 cd "$ELECTRON_DIR"
 npm run dist
 
-# Step 7: Trigger Linux build
-echo ""
-echo "Step 7: Triggering Linux build on 192.168.1.102..."
-LINUX_BUILD_HOST="${LINUX_BUILD_HOST:-}"
-if [ -z "$LINUX_BUILD_HOST" ] && [ -f "$ELECTRON_DIR/.build-host" ]; then
-    LINUX_BUILD_HOST="$(cat "$ELECTRON_DIR/.build-host" | tr -d '[:space:]')"
-fi
-if [ -z "$LINUX_BUILD_HOST" ]; then
-    echo "  Skipping — set LINUX_BUILD_HOST or create electron-ui/.build-host"
-elif ssh -o ConnectTimeout=5 "$LINUX_BUILD_HOST" \
-    'bash /home/owner/dev/pyrokitty-releases/check-and-build-linux.sh' 2>&1; then
-    echo "  Linux build complete."
-else
-    echo "  WARNING: Linux build failed or host unreachable — Windows package is still valid."
-fi
-
 echo ""
 echo "=== Packaging Complete ==="
 

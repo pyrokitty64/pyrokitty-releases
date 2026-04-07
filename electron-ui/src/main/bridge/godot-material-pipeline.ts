@@ -32,7 +32,7 @@ export function resolvedToGodotFace(index: number, material: ResolvedMaterial): 
   if (material.normalTexture) face.normalTextureId = material.normalTexture;
   if (material.ormTexture) face.ormTextureId = material.ormTexture;
   if (material.emissiveTexture) face.emissiveTextureId = material.emissiveTexture;
-  if (material.metallicFactor !== 0) face.metallicFactor = material.metallicFactor;
+  if (material.metallicFactor !== undefined) face.metallicFactor = material.metallicFactor;
   if (material.roughnessFactor !== 1) face.roughnessFactor = material.roughnessFactor;
   if (material.emissiveFactor.some(v => v !== 0)) face.emissiveFactor = material.emissiveFactor;
 

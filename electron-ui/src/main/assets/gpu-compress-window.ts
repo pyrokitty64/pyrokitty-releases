@@ -36,6 +36,10 @@ export function gpuCompressionAvailable(): boolean {
  * Returns true if WebGPU is available and ready.
  */
 export async function initGpuCompressWindow(): Promise<boolean> {
+  if (process.env.FORCE_CPU_COMPRESS) {
+    console.log('[GpuCompress] FORCE_CPU_COMPRESS set, skipping WebGPU init');
+    return false;
+  }
   if (gpuWindow) return gpuAvailable;
 
   const readyPromise = new Promise<boolean>((resolve) => {

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ObjectReadinessTracker } from '../bridge/object-readiness-tracker';
+import type { SendFn } from '../bridge/godot-bridge-types';
 
 describe('ObjectReadinessTracker', () => {
-  let send: ReturnType<typeof vi.fn>;
+  let send: ReturnType<typeof vi.fn<SendFn>>;
   let tracker: ObjectReadinessTracker;
 
   beforeEach(() => {
-    send = vi.fn();
+    send = vi.fn<SendFn>();
     tracker = new ObjectReadinessTracker(send);
   });
 
@@ -290,8 +291,8 @@ describe('ObjectReadinessTracker', () => {
     it('parent emits before child', () => {
       tracker.track('child-1', null, new Set(), new Set(), { uuid: 'child-1' }, 'parent-1');
       tracker.track('parent-1', null, new Set(), new Set(), { uuid: 'parent-1' });
-      expect(send.mock.calls[0][0].uuid).toBe('parent-1');
-      expect(send.mock.calls[1][0].uuid).toBe('child-1');
+      expect((send.mock.calls[0][0] as any).uuid).toBe('parent-1');
+      expect((send.mock.calls[1][0] as any).uuid).toBe('child-1');
     });
 
     it('markEmitted flushes waiting children (avatar parent path)', () => {
@@ -327,7 +328,7 @@ describe('ObjectReadinessTracker', () => {
 
       tracker.track('parent-1', null, new Set(), new Set(), { uuid: 'parent-1' });
       expect(send).toHaveBeenCalledOnce(); // only parent
-      expect(send.mock.calls[0][0].uuid).toBe('parent-1');
+      expect((send.mock.calls[0][0] as any).uuid).toBe('parent-1');
     });
   });
 
@@ -373,17 +374,21 @@ describe('ObjectReadinessTracker', () => {
       tracker.sweepTimeouts();
     });
 
-    it('logs stale objects (does not remove them)', async () => {
+    it('logs stale objects (does not remove them)', () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      // Pin Date.now so createdAt is in the past relative to sweep
+      const fakeNow = 1000;
+      const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(fakeNow);
       tracker.track('obj-1', 'mesh-abc', new Set(), new Set(),{ uuid: 'obj-1' });
 
-      // Wait a tick so Date.now() advances past createdAt
-      await new Promise(r => setTimeout(r, 2));
-      tracker.sweepTimeouts(1);
+      // Advance time past maxAgeMs
+      dateSpy.mockReturnValue(fakeNow + 100);
+      tracker.sweepTimeouts(50);
       expect(consoleSpy).toHaveBeenCalled();
       // Object is still pending
       expect(tracker.pendingCount).toBe(1);
       consoleSpy.mockRestore();
+      dateSpy.mockRestore();
     });
   });
 });

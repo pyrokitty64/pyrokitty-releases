@@ -516,6 +516,9 @@ func handle_update_faces_batch(msg: Dictionary) -> void:
 
 func handle_object_kill(msg: Dictionary) -> void:
 	object_mgr.handle_object_kill(msg)
+	var uuid: String = msg.get("uuid", "")
+	if not uuid.is_empty():
+		name_bubble_mgr.on_object_killed(uuid)
 
 func handle_object_properties(msg: Dictionary) -> void:
 	object_picker.handle_object_properties(msg)
@@ -544,6 +547,13 @@ func handle_avatar_typing(msg: Dictionary) -> void:
 	var avatar_id: String = msg.get("avatarId", "")
 	name_bubble_mgr.on_avatar_typing(avatar_id, msg.get("typing", false))
 	name_bubble_3d_mgr.on_avatar_typing(avatar_id, msg.get("typing", false))
+
+func handle_object_chat(msg: Dictionary) -> void:
+	var object_id: String = msg.get("objectId", "")
+	var message: String = msg.get("message", "")
+	var object_name: String = msg.get("objectName", "")
+	if not object_id.is_empty() and not message.is_empty():
+		name_bubble_mgr.on_object_chat(object_id, message, object_name)
 
 # Self avatar
 func set_world_origin(origin_x: float, origin_y: float) -> void:

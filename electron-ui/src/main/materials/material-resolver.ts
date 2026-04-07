@@ -31,7 +31,6 @@ interface PbrFaceEntry {
   objectUuid: string;
   faceIndex: number;
   face: FaceInput;
-  inlineOverride: PbrMaterialInput | null;
 }
 
 interface LegacyFaceRef {
@@ -250,7 +249,6 @@ export class MaterialResolver {
           }
         }
       }
-
       // Parse inline gltf overrides
       const overrides = te.gltfMaterialOverrides;
       const inlineOverrides = new Map<number, PbrMaterialInput>();
@@ -285,7 +283,7 @@ export class MaterialResolver {
             list = [];
             this.materialToFaces.set(materialUuid, list);
           }
-          list.push({ objectUuid, faceIndex: i, face, inlineOverride });
+          list.push({ objectUuid, faceIndex: i, face });
           materialIdSet.add(materialUuid);
 
           // Only request during live updates (emit=true). For initial objects,
@@ -398,8 +396,22 @@ export class MaterialResolver {
 
     const pbrInput = this.materialDataToPbrInput(data);
 
-    for (const { objectUuid, faceIndex, face, inlineOverride } of entries) {
-      if (!this.trackedObjects.has(objectUuid)) continue;
+    for (const { objectUuid, faceIndex, face } of entries) {
+      const tracked = this.trackedObjects.has(objectUuid);
+      if (!tracked) continue;
+
+      // Read inline GLTF overrides from the live object — they arrive via
+      // GenericStreamingMessage AFTER the ObjectUpdate that triggered resolveObject,
+      // so they aren't available at track time.
+      let inlineOverride: PbrMaterialInput | null = null;
+      try {
+        const obj = this.bot.currentRegion?.objects?.getObjectByUUID(objectUuid as any);
+        const overrideMap = obj?.TextureEntry?.gltfMaterialOverrides;
+        if (overrideMap?.size) {
+          const raw = overrideMap.get(faceIndex);
+          if (raw) inlineOverride = this.overrideToPbrInput(raw);
+        }
+      } catch { /* object may have been removed */ }
 
       // Bake substitution: if legacy face has a bake magic UUID, use bake
       const legacyTexId = face.textureID;

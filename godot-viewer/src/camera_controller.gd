@@ -85,8 +85,8 @@ func _pick_camera() -> Camera3D:
 			return xr_cam
 	return self
 
-@onready var main_node: Node3D = get_node("/root/Main")
-@onready var scene_manager: Node3D = get_node("../SceneManager")
+@onready var main_node: Node3D = get_node_or_null("/root/Main")
+@onready var scene_manager: Node3D = get_node_or_null("../SceneManager")
 
 # Inspector panel
 var _stand_layer: CanvasLayer
@@ -262,6 +262,25 @@ var _key_shift: bool = false
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
+
+		# When a text input has focus, don't process movement — let the field handle typing.
+		# Only Escape is allowed through (to release focus).
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		if focus_owner is LineEdit or focus_owner is TextEdit:
+			# Clear held movement state so avatar stops if keys were held before focus
+			if _key_w or _key_s or _key_a or _key_d or _key_e or _key_c:
+				_key_w = false; _key_s = false; _key_a = false; _key_d = false
+				_key_e = false; _key_c = false; _key_shift = false
+				move_forward = false; move_backward = false
+				turn_left = false; turn_right = false
+				strafe_left = false; strafe_right = false
+				jump = false; crouch = false
+				double_tap_running = false
+				move_dirty = true
+			if ke.keycode == KEY_ESCAPE and ke.pressed and not ke.echo:
+				focus_owner.release_focus()
+				get_viewport().set_input_as_handled()
+			return
 
 		# Track raw key state for movement
 		match ke.keycode:
@@ -551,7 +570,8 @@ func _update_camera() -> void:
 			_last_cam_pos = global_position
 			var msg := {"type": "camera_update"}
 			_append_camera_data(msg)
-			main_node.send_message(msg)
+			if main_node:
+				main_node.send_message(msg)
 
 	# Let the VR rig know where the avatar is so it can position the HMD origin.
 	# Only emit when position or yaw actually changed — moving XROrigin3D every

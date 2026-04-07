@@ -4,6 +4,7 @@ extends Node3D
 ## polls for JSON messages and dispatches them to SceneManager.
 
 const FrameBudget = preload("res://src/frame_budget.gd")
+const PanelManagerScript = preload("res://src/panel_manager.gd")
 
 var tcp_server: TCPServer
 var ws_peer: WebSocketPeer
@@ -32,6 +33,7 @@ var _breadcrumb_file: FileAccess
 var _msg_count: int = 0
 var _frame_count: int = 0
 var _ws_welcomed: bool = false
+var _panel_manager: RefCounted = null
 
 func write_breadcrumb(text: String) -> void:
 	if _breadcrumb_file:
@@ -70,6 +72,11 @@ func _ready() -> void:
 		_breadcrumb_file.store_string("Godot started at %s\n" % Time.get_datetime_string_from_system())
 		_breadcrumb_file.flush()
 		DebugLog.log("main", "Crash breadcrumb: %s" % _breadcrumb_path)
+
+	# Log GPU info (VRAM total detection deferred — see TODO_VRAM_DETECTION.md)
+	var _rd := RenderingServer.get_rendering_device()
+	if _rd:
+		print("[GPU] %s" % _rd.get_device_name())
 
 	# Parse command-line args
 	var args := OS.get_cmdline_user_args()
@@ -177,6 +184,10 @@ func _ready() -> void:
 		# GPU frame time measurement is toggled with the stats bar (Ctrl+Shift+1)
 		RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), _stats_bar.visible)
 
+	# Panel manager — handles script dialogs, textboxes, etc.
+	if _active_camera:
+		_panel_manager = PanelManagerScript.new(scene_manager, _active_camera, send_message)
+
 	tcp_server = TCPServer.new()
 	var err := tcp_server.listen(ws_port, "127.0.0.1")
 	if err != OK:
@@ -189,6 +200,11 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_frame_count += 1
 	write_breadcrumb("_process START msgs=%d queued=%d" % [_msg_count, _low_priority_queue.size()])
+
+	# Panel manager (script dialogs etc.) — tick timers & position updates
+	if _panel_manager:
+		_panel_manager.process(_delta)
+
 	# Consolidated stats: update label + console log every 1s
 	_stats_update_timer += _delta
 	if _stats_update_timer >= 1.0:
@@ -440,7 +456,7 @@ func _update_stats_bar() -> void:
 ## High-priority messages are dispatched immediately, bypassing the time-budgeted queue.
 func _is_high_priority(text: String) -> bool:
 	var prefix := text.left(40)
-	return '"avatar_' in prefix or '"self_id"' in prefix or '"object_update_p' in prefix or '"sitting_state"' in prefix or '"electron_stats"' in prefix or '"pay_' in prefix
+	return '"avatar_' in prefix or '"self_id"' in prefix or '"object_update_p' in prefix or '"sitting_state"' in prefix or '"electron_stats"' in prefix or '"pay_' in prefix or '"script_dialog"' in prefix or '"object_chat"' in prefix or '"teleport_' in prefix
 
 
 func _handle_message(text: String) -> void:
@@ -506,6 +522,8 @@ func _handle_message(text: String) -> void:
 			scene_manager.handle_avatar_chat(msg)
 		"avatar_typing":
 			scene_manager.handle_avatar_typing(msg)
+		"object_chat":
+			scene_manager.handle_object_chat(msg)
 		"settings":
 			scene_manager.handle_settings(msg)
 		"electron_stats":
@@ -514,6 +532,12 @@ func _handle_message(text: String) -> void:
 			var camera_ctrl := get_node_or_null("Camera3D")
 			if camera_ctrl and camera_ctrl.has_method("handle_pay_message"):
 				camera_ctrl.handle_pay_message(msg)
+		"script_dialog":
+			if _panel_manager:
+				_panel_manager.handle_script_dialog(msg)
+		"teleport_offer":
+			if _panel_manager:
+				_panel_manager.handle_teleport_offer(msg)
 		_:
 			DebugLog.warn("main", "Unknown message type: %s" % msg_type)
 

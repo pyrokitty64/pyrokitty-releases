@@ -21,11 +21,19 @@ interface PendingJob {
   id: number;
   resolve: (result: any) => void;
   reject: (err: Error) => void;
-  mode: 'webp' | 'raw';
+  mode: 'raw' | 'bctex';
 }
 
 export interface RawDecodeResult {
   rgbaPixels: Buffer;
+  width: number;
+  height: number;
+}
+
+export interface BctexDecodeResult {
+  bctexBuf: Buffer;
+  hasAlpha: boolean;
+  mipCount: number;
   width: number;
   height: number;
 }
@@ -38,7 +46,7 @@ interface WorkerEntry {
 export class DecodePool {
   private entries: WorkerEntry[] = [];
   private idle: WorkerEntry[] = [];
-  private queue: { j2cBuffer: Buffer; mode: 'webp' | 'raw'; resolve: (result: any) => void; reject: (err: Error) => void }[] = [];
+  private queue: { j2cBuffer: Buffer; mode: 'raw' | 'bctex'; resolve: (result: any) => void; reject: (err: Error) => void }[] = [];
   private pending = new Map<number, PendingJob>();
   private nextId = 0;
   private destroyed = false;
@@ -55,16 +63,16 @@ export class DecodePool {
     const w = new Worker(workerPath, { workerData: { workerId: this.entries.length } });
     const entry: WorkerEntry = { worker: w, idleTimer: null };
 
-    w.on('message', (msg: { id: number; webpBuf?: Buffer; rgbaPixels?: Buffer; width?: number; height?: number; error?: string }) => {
+    w.on('message', (msg: { id: number; rgbaPixels?: Buffer; bctexBuf?: Buffer; hasAlpha?: boolean; mipCount?: number; width?: number; height?: number; error?: string }) => {
       const job = this.pending.get(msg.id);
       if (!job) return;
       this.pending.delete(msg.id);
       if (msg.error) {
         job.reject(new Error(msg.error));
-      } else if (job.mode === 'raw') {
-        job.resolve({ rgbaPixels: msg.rgbaPixels!, width: msg.width!, height: msg.height! } as RawDecodeResult);
+      } else if (job.mode === 'bctex') {
+        job.resolve({ bctexBuf: msg.bctexBuf!, hasAlpha: msg.hasAlpha!, mipCount: msg.mipCount!, width: msg.width!, height: msg.height! } as BctexDecodeResult);
       } else {
-        job.resolve(msg.webpBuf!);
+        job.resolve({ rgbaPixels: msg.rgbaPixels!, width: msg.width!, height: msg.height! } as RawDecodeResult);
       }
       this.idle.push(entry);
       this.startIdleTimer(entry);
@@ -111,20 +119,20 @@ export class DecodePool {
   get activeCount(): number { return this.pending.size; }
   get workerCount(): number { return this.entries.length; }
 
-  /** Decode J2C to WebP buffer (original path for Godot fallback). */
-  decode(j2cBuffer: Buffer): Promise<Buffer> {
-    if (this.destroyed) return Promise.reject(new Error('Pool destroyed'));
-    return new Promise((resolve, reject) => {
-      this.queue.push({ j2cBuffer, mode: 'webp', resolve, reject });
-      this.drain();
-    });
-  }
-
   /** Decode J2C to raw RGBA pixels + dimensions (for GPU compression pipeline). */
   decodeRaw(j2cBuffer: Buffer): Promise<RawDecodeResult> {
     if (this.destroyed) return Promise.reject(new Error('Pool destroyed'));
     return new Promise((resolve, reject) => {
       this.queue.push({ j2cBuffer, mode: 'raw', resolve, reject });
+      this.drain();
+    });
+  }
+
+  /** Decode J2C and compress to BC1/BC3 on CPU (fallback when GPU unavailable). */
+  decodeBctex(j2cBuffer: Buffer): Promise<BctexDecodeResult> {
+    if (this.destroyed) return Promise.reject(new Error('Pool destroyed'));
+    return new Promise((resolve, reject) => {
+      this.queue.push({ j2cBuffer, mode: 'bctex', resolve, reject });
       this.drain();
     });
   }

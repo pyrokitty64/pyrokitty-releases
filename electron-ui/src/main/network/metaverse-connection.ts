@@ -22,8 +22,8 @@ import type { SoundTriggerMessage } from '../../../node-metaverse/dist/lib/class
 import type { AttachedSoundMessage } from '../../../node-metaverse/dist/lib/classes/messages/AttachedSound';
 import type { AttachedSoundGainChangeMessage } from '../../../node-metaverse/dist/lib/classes/messages/AttachedSoundGainChange';
 import type { PreloadSoundMessage } from '../../../node-metaverse/dist/lib/classes/messages/PreloadSound';
-import type { ObjectAnimationMessage } from '../../../node-metaverse/dist/lib/classes/messages/ObjectAnimation';
-import type { AvatarAnimationMessage } from '../../../node-metaverse/dist/lib/classes/messages/AvatarAnimation';
+/** Fields we actually read from animation circuit messages (may be missing on truncated packets). */
+type AnimationPacket = { Sender?: { ID?: { toString(): string } }; AnimationList?: { AnimID: { toString(): string }; AnimSequenceID: number }[] };
 import { SoundFetchQueue } from '../assets/sound-fetch-queue';
 import * as SoundPlayer from '../assets/sound-player';
 import {
@@ -716,10 +716,11 @@ export class MetaverseConnection extends EventEmitter {
 
       this.objectAnimationSub = circuit.subscribeToMessages([
         Message.ObjectAnimation,
-      ], (packet: any) => {
-        const msg = packet.message as ObjectAnimationMessage;
-        const senderUuid = msg.Sender.ID.toString();
-        const animations = msg.AnimationList.map((a: any) => ({
+      ], (packet) => {
+        const msg = packet.message as unknown as AnimationPacket;
+        const senderUuid = msg.Sender?.ID?.toString();
+        if (!senderUuid || !msg.AnimationList) return;
+        const animations = msg.AnimationList.map(a => ({
           animId: a.AnimID.toString(),
           sequenceId: a.AnimSequenceID,
         }));
@@ -749,10 +750,11 @@ export class MetaverseConnection extends EventEmitter {
 
       this.avatarAnimationSub = circuit.subscribeToMessages([
         Message.AvatarAnimation,
-      ], (packet: any) => {
-        const msg = packet.message as AvatarAnimationMessage;
-        const avatarId = msg.Sender.ID.toString();
-        const animations = msg.AnimationList.map((a: any) => ({
+      ], (packet) => {
+        const msg = packet.message as unknown as AnimationPacket;
+        const avatarId = msg.Sender?.ID?.toString();
+        if (!avatarId || !msg.AnimationList) return;
+        const animations = msg.AnimationList.map(a => ({
           animId: a.AnimID.toString(),
           sequenceId: a.AnimSequenceID,
         }));

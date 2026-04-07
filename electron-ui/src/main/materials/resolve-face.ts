@@ -190,7 +190,7 @@ export function resolvePbrFace(
     baseColorTexture: resolvedTexture,
     baseColorFactor: baseColor ?? legacyColor,
     emissiveFactor: finalEmissive,
-    metallicFactor: metallicFactor ?? 0,
+    metallicFactor: metallicFactor ?? 1,
     roughnessFactor: roughnessFactor ?? 1,
     alphaMode: alphaMode ?? 0,
     alphaCutoff: alphaCutoff ?? 0.5,

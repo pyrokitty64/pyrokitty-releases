@@ -1,7 +1,7 @@
 /**
  * texture-fetch-queue.ts — Concurrent texture download queue with dedup and caching.
- * Downloads J2C from SL CDN, decodes to RGBA/WebP via worker thread pool,
- * optionally GPU-compresses to .bctex, writes to disk cache.
+ * Downloads J2C from SL CDN, decodes via worker thread pool,
+ * compresses to BC1/BC3 .bctex (GPU when available, CPU fallback), writes to disk cache.
  */
 
 import { AssetType } from '../../../node-metaverse/dist/lib';
@@ -13,6 +13,7 @@ import { TRANSPARENT_TEXTURES, SOLID_COLOR_TEXTURES, WATER_EXCLUSION_TEXTURES, B
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import { pkDebug } from '../pk-debug';
 
 const MAX_CONCURRENT_DOWNLOADS = 32;
 
@@ -32,18 +33,21 @@ function getCacheDir(): string {
   return path.join(app.getPath('userData'), 'asset-cache', 'textures');
 }
 
-/** Recognized cache extensions in priority order (first match wins). */
-const EXT_PRIORITY: readonly string[] = ['.bc1.bctex', '.bc3.bctex', '.webp', '.png'];
+/** Valid cache extensions. */
+type CacheExt = '.bc1.bctex' | '.bc3.bctex';
 
-/** Extract the full compound extension (.bc1.bctex, .bc3.bctex, .webp, .png) from a filename. */
-function getCacheExt(filename: string): string | null {
+/** Recognized cache extensions in priority order (first match wins). */
+const EXT_PRIORITY: readonly CacheExt[] = ['.bc1.bctex', '.bc3.bctex'];
+
+/** Extract the full compound extension from a filename. */
+function getCacheExt(filename: string): CacheExt | null {
   for (const ext of EXT_PRIORITY) {
     if (filename.endsWith(ext)) return ext;
   }
   return null;
 }
 
-const cachedTextures = new Map<string, string>();
+const cachedTextures = new Map<string, CacheExt>();
 
 export async function initTextureCache(): Promise<void> {
   const dir = getCacheDir();
@@ -65,15 +69,15 @@ export async function initTextureCache(): Promise<void> {
   }
 }
 
-function recordCached(uuid: string, ext: string): void {
+function recordCached(uuid: string, ext: CacheExt): void {
   const existing = cachedTextures.get(uuid);
   if (!existing || EXT_PRIORITY.indexOf(ext) < EXT_PRIORITY.indexOf(existing)) {
     cachedTextures.set(uuid, ext);
   }
 }
 
-/** Whether a cached texture extension indicates an opaque (BC1) texture. */
-function isExtOpaque(ext: string): boolean {
+/** Whether a cached texture extension indicates an opaque texture. */
+function isExtOpaque(ext: CacheExt): boolean {
   return ext === '.bc1.bctex';
 }
 
@@ -82,25 +86,14 @@ export function textureCachePath(textureUuid: string): string {
   return path.join(getCacheDir(), `${textureUuid}.bctex`);
 }
 
-/** WebP fallback path */
-function webpCachePath(textureUuid: string): string {
-  return path.join(getCacheDir(), `${textureUuid}.webp`);
-}
-
-/** Legacy PNG path — used to detect old cache entries */
-function legacyPngPath(textureUuid: string): string {
-  return path.join(getCacheDir(), `${textureUuid}.png`);
-}
-
 export function isTextureCached(textureUuid: string): boolean {
   return cachedTextures.has(textureUuid);
 }
 
-/** Return the actual cached path (.bctex preferred, then .webp, then .png) */
+/** Return the actual cached path for a texture. */
 function resolvedCachePath(textureUuid: string): string {
-  const ext = cachedTextures.get(textureUuid);
-  if (ext) return path.join(getCacheDir(), `${textureUuid}${ext}`);
-  return path.join(getCacheDir(), `${textureUuid}.png`);
+  const ext = cachedTextures.get(textureUuid)!;
+  return path.join(getCacheDir(), `${textureUuid}${ext}`);
 }
 
 export class TextureFetchQueue {
@@ -115,7 +108,7 @@ export class TextureFetchQueue {
   readonly decodePool: DecodePool;
   private gpuQueue: GpuCompressQueue;
   private _gpuCompressCount = 0;
-  private _webpFallbackCount = 0;
+  private _cpuCompressCount = 0;
   // Bake texture metadata: textureUuid → { avatarUuid, channel }
   private bakeInfo = new Map<string, { avatarUuid: string; channel: number }>();
 
@@ -136,7 +129,7 @@ export class TextureFetchQueue {
   get failedCount(): number { return this.failed.size; }
   get notifiedCount(): number { return this.notified.size; }
   get gpuCompressCount(): number { return this._gpuCompressCount; }
-  get webpFallbackCount(): number { return this._webpFallbackCount; }
+  get cpuCompressCount(): number { return this._cpuCompressCount; }
   get gpuQueueDepth(): number { return this.gpuQueue.queueDepth; }
   get gpuQueueActive(): number { return this.gpuQueue.activeCount; }
 
@@ -246,12 +239,16 @@ export class TextureFetchQueue {
       // Try GPU compression path first
       if (gpuCompressionAvailable()) {
         try {
+          const t0 = performance.now();
           const raw = await this.decodePool.decodeRaw(j2cBuf);
+          const decodeMs = performance.now() - t0;
           const basePath = textureCachePath(textureUuid); // .bctex — gpu-compress replaces ext
           const result = await this.gpuQueue.compress(raw.rgbaPixels, raw.width, raw.height, basePath);
+          const totalMs = performance.now() - t0;
           const ext = getCacheExt(path.basename(result.cachePath)) || '.bc3.bctex';
           recordCached(textureUuid, ext);
           this._gpuCompressCount++;
+          pkDebug('texperf', `GPU ${raw.width}x${raw.height} ${isExtOpaque(ext) ? 'BC1' : 'BC3'} decode=${decodeMs.toFixed(1)}ms compress=${result.timeMs.toFixed(1)}ms total=${totalMs.toFixed(1)}ms ${textureUuid.slice(0,8)}`);
 
           if (!this.destroyed) {
             this.notified.add(textureUuid);
@@ -260,22 +257,27 @@ export class TextureFetchQueue {
           }
           return;
         } catch (gpuErr: any) {
-          // GPU compression failed — fall through to WebP path
-          console.warn(`[TextureFetchQueue] GPU compress failed for ${textureUuid}, falling back to WebP: ${gpuErr.message}`);
+          // GPU compression failed — fall through to CPU BC compression
+          console.warn(`[TextureFetchQueue] GPU compress failed for ${textureUuid}, falling back to CPU: ${gpuErr.message}`);
         }
       }
 
-      // Fallback: WebP path (original behavior)
-      const webpBuf = await this.decodePool.decode(j2cBuf);
-      const cachePath = webpCachePath(textureUuid);
+      // Fallback: CPU BC compression (same .bctex output as GPU path)
+      const t0cpu = performance.now();
+      const { bctexBuf, hasAlpha, mipCount, width: cpuW, height: cpuH } = await this.decodePool.decodeBctex(j2cBuf);
+      const cpuMs = performance.now() - t0cpu;
+      const ext = hasAlpha ? '.bc3.bctex' : '.bc1.bctex';
+      const cachePath = path.join(getCacheDir(), `${textureUuid}${ext}`);
       await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
-      await fs.promises.writeFile(cachePath, webpBuf);
-      recordCached(textureUuid, '.webp');
-      this._webpFallbackCount++;
+      await fs.promises.writeFile(cachePath, bctexBuf);
+      const cpuTotalMs = performance.now() - t0cpu;
+      recordCached(textureUuid, ext);
+      this._cpuCompressCount++;
+      pkDebug('texperf', `CPU ${cpuW}x${cpuH} ${hasAlpha ? 'BC3' : 'BC1'} decode+compress=${cpuMs.toFixed(1)}ms total=${cpuTotalMs.toFixed(1)}ms ${textureUuid.slice(0,8)}`);
 
       if (!this.destroyed) {
         this.notified.add(textureUuid);
-        this.onReady(textureUuid, cachePath, false); // WebP/PNG — assume has alpha
+        this.onReady(textureUuid, cachePath, !hasAlpha);
         this.onResolved?.(textureUuid);
       }
     } catch (err: any) {
