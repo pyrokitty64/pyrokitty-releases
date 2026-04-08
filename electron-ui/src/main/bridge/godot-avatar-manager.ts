@@ -16,6 +16,7 @@ import type { MaterialResolver } from '../materials/material-resolver';
 import type { SendFn } from './godot-bridge-types';
 import { isHudAttachment, BAKE_CHANNEL_NAMES, BAKE_CHANNEL_TO_TE_FACE, ZERO_UUID, slPos, slQuat } from './godot-bridge-types';
 import { computeShapeDeltas } from '../avatar/avatar-shape';
+import { pkDebug } from '../pk-debug';
 
 export class GodotAvatarManager {
   private avatarAttachSubs = new Map<string, Subscription>();
@@ -66,7 +67,7 @@ export class GodotAvatarManager {
         const hoverHeight = this.avatarHoverHeights.get(avatarId) || 0;
         this.send({ type: 'avatar_shape', avatarId, bones, volumeMorphs, hoverHeight });
       }
-      console.log(`[AvatarShape] Flushed ${this.avatarShapes.size} buffered shapes on connect`);
+      pkDebug('avatar', `[AvatarShape] Flushed ${this.avatarShapes.size} buffered shapes on connect`);
     }
   }
 
@@ -111,7 +112,7 @@ export class GodotAvatarManager {
           .map((uuid, i) => (uuid && uuid !== ZERO_UUID) ? `${BAKE_CHANNEL_NAMES[i]}=${uuid.slice(0, 8)}` : null)
           .filter(Boolean);
         const explicit = Array.from(te.explicitTextureFaces).sort((a, b) => a - b);
-        console.log(`[BoM] AvatarAppearance for ${avatarId.slice(0, 8)}: ${filled.length}/11 bake channels — ${filled.join(', ')}  (explicitFaces: ${explicit.join(',')})`);
+        pkDebug('avatar', `[BoM] AvatarAppearance for ${avatarId.slice(0, 8)}: ${filled.length}/11 bake channels — ${filled.join(', ')}  (explicitFaces: ${explicit.join(',')})`);
 
         // Check if bakes changed (or this is the first appearance)
         const changed = !prevBakes || bakes.some((b, i) => b !== prevBakes[i]);
@@ -134,7 +135,7 @@ export class GodotAvatarManager {
               this.avatarHoverHeights.set(avatarId, hoverHeight);
               this.send({ type: 'avatar_shape', avatarId, bones, volumeMorphs, hoverHeight });
               // Debug: log key bone deltas for leg and body bones
-              console.log(`[AvatarShape] ${avatarId.slice(0, 8)}: ${boneCount} bones, ${Object.keys(volumeMorphs).length} volume morphs`);
+              pkDebug('avatar', `[AvatarShape] ${avatarId.slice(0, 8)}: ${boneCount} bones, ${Object.keys(volumeMorphs).length} volume morphs`);
             }
           } catch (shapeErr) {
             console.warn('[AvatarShape] Error computing shape:', (shapeErr as Error).message);
@@ -237,7 +238,7 @@ export class GodotAvatarManager {
     // Delegate to MaterialResolver — it handles bake substitution,
     // face re-resolution, texture fetches, and callback emission.
     this.materialResolver.handleBakeTextureUpdate(avatarId, objectSet);
-    console.log(`[BoM] Re-emitted face updates for ${objectSet.size} objects of avatar ${avatarId.slice(0, 8)}`);
+    pkDebug('avatar', `[BoM] Re-emitted face updates for ${objectSet.size} objects of avatar ${avatarId.slice(0, 8)}`);
   }
 
   // ─── Avatar Lifecycle ─────────────────────────────────────────
@@ -284,7 +285,7 @@ export class GodotAvatarManager {
       // Mark as tracked to prevent redundant re-creates, but add to deferred set
       // so onNewObject can recover it when the ObjectUpdate arrives with a real localId.
       this.deferredAvatars.add(id);
-      console.log(`[Avatar] ${id.slice(0, 8)} has localId=0, deferring attachments until ObjectUpdate arrives`);
+      pkDebug('avatar', `[Avatar] ${id.slice(0, 8)} has localId=0, deferring attachments until ObjectUpdate arrives`);
     } else {
       this.deferredAvatars.delete(id);
     }

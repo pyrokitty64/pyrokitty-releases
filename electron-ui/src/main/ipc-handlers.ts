@@ -11,6 +11,7 @@ import { InventorySyncManager } from './ui/inventory-sync-manager';
 import { ViewerInventoryAdapter } from './ui/viewer-inventory-adapter';
 import { voiceRegistry } from './voice/voice-registry';
 import { getMapWindow } from './ui/map-window';
+import { pkDebug } from './pk-debug';
 
 // Track sync managers per instance
 const syncManagers = new Map<string, InventorySyncManager>();
@@ -427,7 +428,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   connectionManager.on('viewer-message', (instanceId: string, pump: string, data: any) => {
-    console.log(`[IPC] viewer-message from ${instanceId}, pump: ${pump}, type: ${data.type}`);
+    pkDebug('ipc', `[IPC] viewer-message from ${instanceId}, pump: ${pump}, type: ${data.type}`);
     // Forward chat messages to renderer
     if (data.type === 'nearby' || data.type === 'im') {
       // Skip system messages with no sender (e.g. "is online." / "is offline." friend notifications)
@@ -470,7 +471,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         sessionId,
         isOutgoing: false,
       };
-      console.log(`[IPC] Forwarding chat message to renderer:`, message);
+      pkDebug('chat', `[IPC] Forwarding chat message to renderer: ${JSON.stringify(message)}`);
       mainWindow.webContents.send(IPC_CHANNELS.CHAT_MESSAGE, { instanceId, ...message });
       saveChatMessage(instanceId, message);
     }
@@ -573,7 +574,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     const id = voiceRegistry.getSelectedInstanceId();
     const vm = voiceRegistry.getSelected();
     if (!id || !vm) return;
-    console.log(`[Voice] PTT DOWN (${id})`);
+    pkDebug('voice', `[Voice] PTT DOWN (${id})`);
     const state = getOrCreateVoiceState(id);
     if (state.micMuted) {
       state.micMuted = false;
@@ -586,7 +587,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     const id = voiceRegistry.getSelectedInstanceId();
     const vm = voiceRegistry.getSelected();
     if (!id || !vm) return;
-    console.log(`[Voice] PTT UP (${id})`);
+    pkDebug('voice', `[Voice] PTT UP (${id})`);
     const state = getOrCreateVoiceState(id);
     if (!state.micMuted) {
       state.micMuted = true;

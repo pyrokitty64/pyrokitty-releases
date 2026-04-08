@@ -18,6 +18,7 @@ import type { SendFn } from './godot-bridge-types';
 import { isHudAttachment, slPos, slQuat, slScale } from './godot-bridge-types';
 import type { MaterialResolver } from '../materials/material-resolver';
 import type { ObjectReadinessTracker } from './object-readiness-tracker';
+import { pkDebug } from '../pk-debug';
 
 export class GodotObjectSender {
   /** Deferred objects: uuid → parentUuid ('' for roots, parentUuid for children) */
@@ -293,7 +294,7 @@ export class GodotObjectSender {
       this.selfAttachmentIds.add(objUuid);
       const faceCount = texInfo?.faces?.length ?? 0;
       const texCount = texInfo?.textureIds?.length ?? 0;
-      console.log(`[SelfAvatar] Attachment: uuid=${objUuid.slice(0, 8)} meshId=${meshId?.slice(0, 8) || 'none'} isAnimesh=${isAnimesh} faces=${faceCount} textures=${texCount}`);
+      pkDebug('avatar', `[SelfAvatar] Attachment: uuid=${objUuid.slice(0, 8)} meshId=${meshId?.slice(0, 8) || 'none'} isAnimesh=${isAnimesh} faces=${faceCount} textures=${texCount}`);
       if (meshId) this.selfMeshIds.add(meshId);
       if (texInfo) {
         for (const tid of texInfo.textureIds) this.selfTextureIds.add(tid);
@@ -330,10 +331,10 @@ export class GodotObjectSender {
       this.animationManager.registerAnimeshObject(objUuid);
       const buffered = this.animationManager.getBufferedObjectAnims(objUuid);
       if (buffered && buffered.length > 0) {
-        console.log(`[Animesh] Replaying ${buffered.length} buffered animations for ${objUuid.slice(0, 8)}: ${buffered.map(a => a.animId.slice(0, 8)).join(', ')}`);
+        pkDebug('animation', `[Animesh] Replaying ${buffered.length} buffered animations for ${objUuid.slice(0, 8)}: ${buffered.map(a => a.animId.slice(0, 8)).join(', ')}`);
         this.animationManager.updateAnimSet(objUuid, buffered.map(a => a.animId));
       } else {
-        console.log(`[Animesh] No buffered animations for ${objUuid.slice(0, 8)} (ObjectAnimation not yet received)`);
+        pkDebug('animation', `[Animesh] No buffered animations for ${objUuid.slice(0, 8)} (ObjectAnimation not yet received)`);
       }
     }
     // Subscribe to live texture changes
@@ -349,7 +350,7 @@ export class GodotObjectSender {
       this.sculptFetchQueue.request(sculptInfo.textureUuid, sculptInfo.sculptType, objUuid);
     }
     if (lightInfo?.isSpot && lightInfo.projTexture && this.textureFetchQueue) {
-      console.log(`[GodotBridge] Requesting proj texture ${lightInfo.projTexture} for uuid=${objUuid.slice(0, 8)}`);
+      pkDebug('texture', `[GodotBridge] Requesting proj texture ${lightInfo.projTexture} for uuid=${objUuid.slice(0, 8)}`);
       this.textureFetchQueue.request(lightInfo.projTexture, objUuid);
     }
     // Texture + material fetches are already handled by materialResolver.resolveObject above
@@ -568,7 +569,7 @@ export class GodotObjectSender {
 
       const promoted = toPromoteRoot.length + toPromoteChild.length;
       if (promoted > 0 || toKill.length > 0) {
-        console.log(`[GodotBridge] Sweep: promoted=${promoted} killed=${toKill.length} deferred=${this.deferredTextures.size}`);
+        pkDebug('object', `[GodotBridge] Sweep: promoted=${promoted} killed=${toKill.length} deferred=${this.deferredTextures.size}`);
       }
     } catch { /* bot may be disconnected */ }
     finally { this.sweepInProgress = false; }

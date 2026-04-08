@@ -621,11 +621,13 @@ func _instantiate_animesh_mesh(obj_uuid: String, mesh_id: String, animesh_root_u
 	mesh_instance.transform = Transform3D.IDENTITY  # Reset local transform
 	mesh_instance.skeleton = mesh_instance.get_path_to(shared_skel)
 
-	# For root-prim animesh objects (not avatar bodies), shift the skeleton so
-	# mPelvis aligns with the object/bone position. BSM bakes vertices relative
-	# to the skeleton root, but the object IS at the pelvis conceptually — not
-	# at the skeleton root (which is below the pelvis).
-	if obj_uuid == animesh_root_uuid and not sm.bone_shape_scales.has(animesh_root_uuid):
+	# Shift the skeleton so mPelvis aligns with the object/bone position.
+	# BSM bakes vertices relative to the skeleton root, but the object IS at
+	# the pelvis conceptually — not at the skeleton root (which is below the
+	# pelvis). Applied on every mesh instantiation (idempotent SET) because the
+	# root prim may be a non-mesh placeholder with children being the actual
+	# rigged meshes. Skipped for avatar bodies (they use body_offset instead).
+	if not sm.avatars.has(animesh_root_uuid) and not sm.bone_shape_scales.has(animesh_root_uuid):
 		var pelvis_bi: int = shared_skel.find_bone("mPelvis")
 		if pelvis_bi >= 0:
 			var pelvis_rest: Vector3 = shared_skel.get_bone_rest(pelvis_bi).origin

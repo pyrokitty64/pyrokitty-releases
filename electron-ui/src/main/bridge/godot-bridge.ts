@@ -43,6 +43,7 @@ import { GodotObjectSender } from './godot-object-sender';
 import { GodotAvatarManager } from './godot-avatar-manager';
 import { ObjectReadinessTracker } from './object-readiness-tracker';
 import { isHudAttachment, slPos, slQuat } from './godot-bridge-types';
+import { pkDebug } from '../pk-debug';
 
 const GODOT_WS_PORT_BASE = 9200;
 let nextPort = GODOT_WS_PORT_BASE;
@@ -395,7 +396,7 @@ export class GodotBridge extends EventEmitter {
       const fwdPath = cachePath.replace(/\\/g, '/');
       meshMeta.set(meshUuid, { path: fwdPath, isRigged, jointNames, jointOverrides });
       if (jointOverrides && jointOverrides.length > 0) {
-        console.log(`[MeshReady] meshId=${meshUuid.slice(0, 8)} jointOverrides=${jointOverrides.length}`);
+        pkDebug('mesh', `[MeshReady] meshId=${meshUuid.slice(0, 8)} jointOverrides=${jointOverrides.length}`);
       }
     }, meshCacheDir);
 
@@ -773,7 +774,7 @@ export class GodotBridge extends EventEmitter {
             const region = obj.region;
             const avatar = region?.agents?.get(avatarUuid);
             if (avatar) {
-              console.log(`[Avatar] ${avatarUuid.slice(0, 8)} ObjectUpdate arrived (localId=${obj.ID}), recovering deferred avatar`);
+              pkDebug('avatar', `[Avatar] ${avatarUuid.slice(0, 8)} ObjectUpdate arrived (localId=${obj.ID}), recovering deferred avatar`);
               this.avatarManager.sendAvatarCreate(avatar, avatarUuid);
             }
           } catch { /* avatar may not be accessible */ }
@@ -793,7 +794,7 @@ export class GodotBridge extends EventEmitter {
           // Parent not in object store yet — skip child. When the parent's ObjectUpdate
           // arrives, getObjectsByParent() will find this child and send it with correct parentUuid.
           const childUuid = obj.FullID?.toString() || '';
-          console.log(`[GodotBridge] Child ${childUuid.slice(0, 8)} skipped — parent localId=${parentLocalId} not yet in store`);
+          pkDebug('object', `[GodotBridge] Child ${childUuid.slice(0, 8)} skipped — parent localId=${parentLocalId} not yet in store`);
           return;
         }
       }

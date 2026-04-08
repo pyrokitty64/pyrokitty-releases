@@ -36,6 +36,7 @@ import {
   RegionInfo,
 } from '../../shared/types';
 import { DisplayNameCache } from '../avatar/display-name-cache';
+import { pkDebug } from '../pk-debug';
 
 export interface LoginParams {
   firstName: string;
@@ -366,7 +367,7 @@ export class MetaverseConnection extends EventEmitter {
         [ChatSourceType.System]: 'system',
       };
 
-      console.log(`[NearbyChat] type=${event.chatType} src=${event.sourceType} from="${event.fromName}" msg="${event.message?.substring(0, 80)}"`);
+      pkDebug('chat', `[NearbyChat] type=${event.chatType} src=${event.sourceType} from="${event.fromName}" msg="${event.message?.substring(0, 80)}"`);
 
       // Skip our own messages - we already emit them locally in sendNearbyChat()
       // This avoids duplicates while still allowing server confirmation
@@ -491,16 +492,16 @@ export class MetaverseConnection extends EventEmitter {
     // Friend online status
     this.bot.clientEvents.onFriendOnline.subscribe((event) => {
       const friendId = event.friend.getKey().toString();
-      console.log(`[MetaverseConnection] onFriendOnline: ${friendId} online=${event.online}`);
-      console.log(`[MetaverseConnection] Friends map has ${this.friends.size} entries`);
+      pkDebug('friends', `[MetaverseConnection] onFriendOnline: ${friendId} online=${event.online}`);
+      pkDebug('friends', `[MetaverseConnection] Friends map has ${this.friends.size} entries`);
       const friend = this.friends.get(friendId);
       if (friend) {
-        console.log(`[MetaverseConnection] Found friend ${friend.name}, setting online=${event.online}`);
+        pkDebug('friends', `[MetaverseConnection] Found friend ${friend.name}, setting online=${event.online}`);
         friend.online = event.online;
         this.emit('friend-online', friend, event.online);
         this.emit('friends-update', Array.from(this.friends.values()));
       } else {
-        console.log(`[MetaverseConnection] Friend ${friendId} not found in map`);
+        pkDebug('friends', `[MetaverseConnection] Friend ${friendId} not found in map`);
       }
     });
 
@@ -537,7 +538,7 @@ export class MetaverseConnection extends EventEmitter {
           powers: groupData.groupPowers,
         };
         this.groups.set(group.id, group);
-        console.log(`[MetaverseConnection] Added group: ${group.name} (${group.id})`);
+        pkDebug('groups', `[MetaverseConnection] Added group: ${group.name} (${group.id})`);
       }
       console.log(`[MetaverseConnection] Emitting groups-update with ${this.groups.size} groups`);
       this.emit('groups-update', Array.from(this.groups.values()));
@@ -811,7 +812,7 @@ export class MetaverseConnection extends EventEmitter {
           // Diagnostic: log parsed bake info
           const uniqueBakes = new Set(bakes.filter(b => b && b !== '00000000-0000-0000-0000-000000000000'));
           const filled = bakes.map((uuid, i) => (uuid && uuid !== '00000000-0000-0000-0000-000000000000') ? `${['HEAD','UPPER','LOWER','EYES','SKIRT','HAIR','LARM','LLEG','AUX1','AUX2','AUX3'][i]}=${uuid.slice(0, 8)}` : null).filter(Boolean);
-          console.log(`[BoM-Buffer] AvatarAppearance ${avatarId.slice(0, 8)}: ${uniqueBakes.size} unique bakes — ${filled.join(', ')}`);
+          pkDebug('avatar', `[BoM-Buffer] AvatarAppearance ${avatarId.slice(0, 8)}: ${uniqueBakes.size} unique bakes — ${filled.join(', ')}`);
         } catch (err) {
           console.warn('[BoM-Buffer] Parse error:', (err as Error).message);
         }
@@ -884,7 +885,7 @@ export class MetaverseConnection extends EventEmitter {
         const effectiveGain = dist > maxDist ? 0 : baseGain / Math.max(1, dist);
         SoundPlayer.setAttachedGain(localId, effectiveGain);
         if (doLog) {
-          console.log(`[Sound] Dist localId=${localId} dist=${dist.toFixed(1)}m base=${baseGain.toFixed(2)} eff=${effectiveGain.toFixed(3)} av=(${avatarPos.x.toFixed(0)},${avatarPos.y.toFixed(0)},${avatarPos.z.toFixed(0)}) obj=(${op.x.toFixed(0)},${op.y.toFixed(0)},${op.z.toFixed(0)})`);
+          pkDebug('sound', `[Sound] Dist localId=${localId} dist=${dist.toFixed(1)}m base=${baseGain.toFixed(2)} eff=${effectiveGain.toFixed(3)} av=(${avatarPos.x.toFixed(0)},${avatarPos.y.toFixed(0)},${avatarPos.z.toFixed(0)}) obj=(${op.x.toFixed(0)},${op.y.toFixed(0)},${op.z.toFixed(0)})`);
         }
       } catch {
         SoundPlayer.stopAttached(localId);
@@ -913,7 +914,7 @@ export class MetaverseConnection extends EventEmitter {
       const dx = pos.x - avatarPos.x, dy = pos.y - avatarPos.y, dz = pos.z - avatarPos.z;
       const distSq = dx * dx + dy * dy + dz * dz;
       if (distSq > MetaverseConnection.MAX_SOUND_DISTANCE ** 2) return;
-      console.log(`[Sound] Trigger ${soundId.slice(0, 8)} gain=${gain.toFixed(2)} dist=${Math.sqrt(distSq).toFixed(1)}m`);
+      pkDebug('sound', `[Sound] Trigger ${soundId.slice(0, 8)} gain=${gain.toFixed(2)} dist=${Math.sqrt(distSq).toFixed(1)}m`);
     }
 
     if (!this.pendingSounds.has(soundId)) this.pendingSounds.set(soundId, []);
@@ -936,7 +937,7 @@ export class MetaverseConnection extends EventEmitter {
     if (localId === undefined) return;
 
     if (flags & SoundFlags.Stop) {
-      console.log(`[Sound] Stop attached localId=${localId} obj=${objectUuid.slice(0, 8)}`);
+      pkDebug('sound', `[Sound] Stop attached localId=${localId} obj=${objectUuid.slice(0, 8)}`);
       SoundPlayer.stopAttached(localId);
       this.attachedSoundGains.delete(localId);
       return;
@@ -953,7 +954,7 @@ export class MetaverseConnection extends EventEmitter {
         const dx = op.x - avatarPos.x, dy = op.y - avatarPos.y, dz = op.z - avatarPos.z;
         const distSq = dx * dx + dy * dy + dz * dz;
         if (distSq > MetaverseConnection.MAX_SOUND_DISTANCE ** 2) return;
-        console.log(`[Sound] Attached ${soundId.slice(0, 8)} localId=${localId} gain=${gain.toFixed(2)} loop=${loop} dist=${Math.sqrt(distSq).toFixed(1)}m`);
+        pkDebug('sound', `[Sound] Attached ${soundId.slice(0, 8)} localId=${localId} gain=${gain.toFixed(2)} loop=${loop} dist=${Math.sqrt(distSq).toFixed(1)}m`);
       }
     }
 
@@ -1005,7 +1006,7 @@ export class MetaverseConnection extends EventEmitter {
         }
         const triggerId = this.nextTriggerId--;
         this.triggerSounds.set(triggerId, { baseGain: evt.gain, position: evt.position });
-        console.log(`[Sound] Play trigger ${soundId.slice(0, 8)} gain=${evt.gain.toFixed(2)} distGain=${distGain.toFixed(2)}`);
+        pkDebug('sound', `[Sound] Play trigger ${soundId.slice(0, 8)} gain=${evt.gain.toFixed(2)} distGain=${distGain.toFixed(2)}`);
         SoundPlayer.playAttached(triggerId, fwdPath, evt.gain * distGain, false);
         setTimeout(() => this.triggerSounds.delete(triggerId), 30_000);
       } else if (evt.type === 'attached' && evt.localId !== undefined) {
@@ -1024,7 +1025,7 @@ export class MetaverseConnection extends EventEmitter {
           } catch { /* ok */ }
         }
         this.attachedSoundGains.set(evt.localId, evt.gain);
-        console.log(`[Sound] Play attached ${soundId.slice(0, 8)} localId=${evt.localId} gain=${evt.gain.toFixed(2)} distGain=${distGain.toFixed(2)} loop=${evt.loop}`);
+        pkDebug('sound', `[Sound] Play attached ${soundId.slice(0, 8)} localId=${evt.localId} gain=${evt.gain.toFixed(2)} distGain=${distGain.toFixed(2)} loop=${evt.loop}`);
         SoundPlayer.playAttached(evt.localId, fwdPath, evt.gain * distGain, evt.loop ?? false);
       }
     }
@@ -1039,7 +1040,7 @@ export class MetaverseConnection extends EventEmitter {
     console.log(`[MetaverseConnection] populateFriendsFromLogin: ${this.bot.agent.buddyList.length} buddies`);
     for (const buddy of this.bot.agent.buddyList) {
       const friendId = buddy.buddyID.toString();
-      console.log(`[MetaverseConnection] Adding friend: ${friendId}`);
+      pkDebug('friends', `[MetaverseConnection] Adding friend: ${friendId}`);
       const friend: Friend = {
         id: friendId,
         name: '', // Will be resolved later via name lookup
@@ -1107,17 +1108,17 @@ export class MetaverseConnection extends EventEmitter {
 
     // Filter to only uncached or stale UUIDs
     const toResolve = uuids.filter(uuid => !this.displayNameCache!.get(uuid) || this.displayNameCache!.isStale(uuid));
-    console.log(`[MetaverseConnection] resolveDisplayNames: ${uuids.length} total, ${toResolve.length} to resolve`);
+    pkDebug('avatar', `[MetaverseConnection] resolveDisplayNames: ${uuids.length} total, ${toResolve.length} to resolve`);
     if (toResolve.length === 0) return;
 
     try {
       const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
       const uuidObjects = toResolve.map(id => new UUID(id));
       const results = await this.bot.clientCommands.grid.getDisplayNames(uuidObjects);
-      console.log(`[MetaverseConnection] resolveDisplayNames: got ${results.size} results`);
+      pkDebug('avatar', `[MetaverseConnection] resolveDisplayNames: got ${results.size} results`);
       if (results.size > 0) {
         this.displayNameCache.bulkSet(results);
-        console.log(`[DisplayNameCache] Resolved ${results.size} display names`);
+        pkDebug('avatar', `[DisplayNameCache] Resolved ${results.size} display names`);
       }
     } catch (err) {
       console.error('[MetaverseConnection] Error resolving display names:', err);

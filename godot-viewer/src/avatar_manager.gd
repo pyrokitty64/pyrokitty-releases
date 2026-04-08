@@ -325,6 +325,11 @@ func handle_avatar_shape(msg: Dictionary) -> void:
 	if _avatar_volume_morphs.has(avatar_id):
 		sm.cv_volume_morphs[avatar_id] = _avatar_volume_morphs[avatar_id]
 
+	# Only apply shape to real avatars — animesh ControlAvatars don't have shapes;
+	# their skeleton is defined by mesh joint overrides only.
+	if not sm.avatars.has(avatar_id):
+		return
+
 	var shared_skel: Skeleton3D = sm.animesh_shared_skeleton.get(avatar_id)
 	if shared_skel == null:
 		return

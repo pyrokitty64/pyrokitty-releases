@@ -13,6 +13,7 @@ import {
   TRANSPARENT_TEXTURES, SOLID_COLOR_TEXTURES, WATER_EXCLUSION_TEXTURES,
 } from './godot-bridge-types';
 import type { SendFn } from './godot-bridge-types';
+import { pkDebug } from '../pk-debug';
 
 /** Unfetchable texture IDs that must never enter needsTextures — they are never downloaded.
  *  Must stay in sync with the skip checks in MaterialResolver.requestTexture(). */
@@ -380,7 +381,7 @@ export class ObjectReadinessTracker {
       // Show top 3 blocking textures
       const topBlockers = [...allMissingTex.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
       const blockerStr = topBlockers.map(([tid, n]) => `${tid.substring(0, 8)}(${n}objs)`).join(' ');
-      console.log(`[ReadinessTracker] ${staleCount} objects still waiting (>${(maxAgeMs / 1000).toFixed(0)}s) sample=${sampleUuid} ${sampleWaiting} | top_blocked_tex: ${blockerStr} | waiting_for_parent: ${waitingForParent} waiting_for_mat: ${waitingForMaterial}`);
+      pkDebug('readiness', `[ReadinessTracker] ${staleCount} objects still waiting (>${(maxAgeMs / 1000).toFixed(0)}s) sample=${sampleUuid} ${sampleWaiting} | top_blocked_tex: ${blockerStr} | waiting_for_parent: ${waitingForParent} waiting_for_mat: ${waitingForMaterial}`);
     }
   }
 

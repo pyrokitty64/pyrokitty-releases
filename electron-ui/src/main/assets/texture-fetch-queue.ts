@@ -213,7 +213,7 @@ export class TextureFetchQueue {
       if (bake) {
         try {
           j2cBuf = await this.downloadBakeTexture(textureUuid, bake.avatarUuid, bake.channel);
-          console.log(`[BoM] Downloaded bake ${textureUuid.slice(0,8)}: ${j2cBuf.length} bytes`);
+          pkDebug('texture', `[BoM] Downloaded bake ${textureUuid.slice(0,8)}: ${j2cBuf.length} bytes`);
         } catch (bakeErr: any) {
           // Appearance service may 404 for some bake channels (e.g. other
           // avatars' universal bakes).  Fall back to regular asset fetch.
@@ -302,7 +302,7 @@ export class TextureFetchQueue {
 
     // URL format: {appearance_service_url}texture/{avatarUUID}/{channelName}/{textureUUID}
     const url = `${serviceUrl}texture/${avatarUuid}/${channelName}/${textureUuid}`;
-    console.log(`[BoM] Fetching bake: ${url}`);
+    pkDebug('texture', `[BoM] Fetching bake: ${url}`);
 
     const { net } = require('electron');
     return new Promise<Buffer>((resolve, reject) => {

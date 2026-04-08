@@ -14,6 +14,7 @@ import { RegionEnvironment } from '../../../node-metaverse/dist/lib/classes/publ
 import { LLSD } from '../../../node-metaverse/dist/lib/classes/llsd/LLSD';
 import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
 import type { TerrainCompleteEvent } from '../../../node-metaverse/dist/lib/events/TerrainCompleteEvent';
+import { pkDebug } from '../pk-debug';
 
 function getCacheDirBase(): string {
   return path.join(app.getPath('userData'), 'asset-cache');
@@ -70,7 +71,7 @@ export class GodotEnvironmentManager {
     fs.writeFileSync(gridPath, buf);
     const fwdPath = cachePath.replace(/\\/g, '/');
 
-    console.log(`[GodotBridge] Terrain cached for region ${gridX},${gridY} (waterHeight=${waterHeight})`);
+    pkDebug('terrain', `[GodotBridge] Terrain cached for region ${gridX},${gridY} (waterHeight=${waterHeight})`);
     this.send({
       type: 'terrain_ready',
       path: fwdPath,
@@ -168,10 +169,10 @@ export class GodotEnvironmentManager {
       // If is_default, the parcel uses the region environment — no override
       if (parcelEnv.isDefault) {
         this._parcelEnvCache = { parcelId, env: null, fetchedAt: Date.now() };
-        console.log(`[Env] Parcel ${parcelId} uses region default environment`);
+        pkDebug('env', `[Env] Parcel ${parcelId} uses region default environment`);
       } else {
         this._parcelEnvCache = { parcelId, env: parcelEnv, fetchedAt: Date.now() };
-        console.log(`[Env] Parcel ${parcelId} has environment override (dayLength=${parcelEnv.dayLength})`);
+        pkDebug('env', `[Env] Parcel ${parcelId} has environment override (dayLength=${parcelEnv.dayLength})`);
       }
       return this._parcelEnvCache.env;
     } catch (err) {

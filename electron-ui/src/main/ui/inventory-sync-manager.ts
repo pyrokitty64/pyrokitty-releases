@@ -9,6 +9,7 @@ import { InventoryItem } from '../../../node-metaverse/dist/lib/classes/Inventor
 import { j2cToPng, pngToJ2c } from '../assets/j2k-converter';
 import { SyncStatus } from '../../shared/types';
 import { ViewerInventoryAdapter, ViewerInventoryFolder } from './viewer-inventory-adapter';
+import { pkDebug } from '../pk-debug';
 
 const SYNC_FOLDER_NAME = '#Inventory Sync';
 const MANIFEST_FILE = 'sync-manifest.json';
@@ -343,7 +344,7 @@ export class InventorySyncManager {
     const localPath = path.join(targetDir, localFile);
     const key = manifestKey(relativePath, name);
 
-    console.log(`[InventorySync] Downloading: ${key} (${assetId})`);
+    pkDebug('inventory', `[InventorySync] Downloading: ${key} (${assetId})`);
 
     const j2cBuffer = await this.downloadAssetData(item, AssetType.Texture);
     const pngBuffer = await j2cToPng(j2cBuffer);
@@ -370,7 +371,7 @@ export class InventorySyncManager {
     const localPath = path.join(targetDir, localFile);
     const key = manifestKey(relativePath, name);
 
-    console.log(`[InventorySync] Downloading notecard: ${key} (${assetId})`);
+    pkDebug('inventory', `[InventorySync] Downloading notecard: ${key} (${assetId})`);
 
     const rawBuffer = await this.downloadAssetData(item, AssetType.Notecard);
 
@@ -401,7 +402,7 @@ export class InventorySyncManager {
     const localPath = path.join(targetDir, localFile);
     const key = manifestKey(relativePath, name);
 
-    console.log(`[InventorySync] Downloading script: ${key} (${assetId})`);
+    pkDebug('inventory', `[InventorySync] Downloading script: ${key} (${assetId})`);
 
     const rawBuffer = await this.downloadAssetData(item, AssetType.LSLText);
 
@@ -533,7 +534,7 @@ export class InventorySyncManager {
         continue;
       }
 
-      console.log(`[InventorySync] Creating SL folder: ${localRelPath}`);
+      pkDebug('inventory', `[InventorySync] Creating SL folder: ${localRelPath}`);
       try {
         const newFolder = await (parentNode.folder as any).createFolder(folderName, FolderType.None);
         await newFolder.populate(false);
@@ -569,7 +570,7 @@ export class InventorySyncManager {
       try {
         const oldItem = slFolder.items.find(i => i.itemID.toString() === existing.itemId);
         if (oldItem) {
-          console.log(`[InventorySync] Deleting old SL item: ${key}`);
+          pkDebug('inventory', `[InventorySync] Deleting old SL item: ${key}`);
           await oldItem.delete();
         }
       } catch (error) {
@@ -577,7 +578,7 @@ export class InventorySyncManager {
       }
     }
 
-    console.log(`[InventorySync] Uploading: ${key}`);
+    pkDebug('inventory', `[InventorySync] Uploading: ${key}`);
     const j2cBuffer = await pngToJ2c(pngBuffer);
 
     const newItem = await slFolder.uploadAsset(
@@ -615,7 +616,7 @@ export class InventorySyncManager {
 
     // If the item exists in SL and we're using the viewer adapter, update in-place
     if (existing && this.adapter) {
-      console.log(`[InventorySync] Updating notecard in-place: ${key}`);
+      pkDebug('inventory', `[InventorySync] Updating notecard in-place: ${key}`);
       const result = await this.adapter.updateAsset(existing.itemId, assetBuffer);
 
       this.manifest.items[key] = {
@@ -633,7 +634,7 @@ export class InventorySyncManager {
       try {
         const oldItem = slFolder.items.find(i => i.itemID.toString() === existing.itemId);
         if (oldItem) {
-          console.log(`[InventorySync] Deleting old SL notecard: ${key}`);
+          pkDebug('inventory', `[InventorySync] Deleting old SL notecard: ${key}`);
           await oldItem.delete();
         }
       } catch (error) {
@@ -641,7 +642,7 @@ export class InventorySyncManager {
       }
     }
 
-    console.log(`[InventorySync] Uploading notecard: ${key}`);
+    pkDebug('inventory', `[InventorySync] Uploading notecard: ${key}`);
     const newItem = await slFolder.uploadAsset(
       AssetType.Notecard,
       InventoryType.Notecard,
@@ -677,7 +678,7 @@ export class InventorySyncManager {
 
     // If the item exists in SL and we're using the viewer adapter, update in-place
     if (existing && this.adapter) {
-      console.log(`[InventorySync] Updating script in-place: ${key}`);
+      pkDebug('inventory', `[InventorySync] Updating script in-place: ${key}`);
       const result = await this.adapter.updateAsset(existing.itemId, assetBuffer);
 
       this.manifest.items[key] = {
@@ -695,7 +696,7 @@ export class InventorySyncManager {
       try {
         const oldItem = slFolder.items.find(i => i.itemID.toString() === existing.itemId);
         if (oldItem) {
-          console.log(`[InventorySync] Deleting old SL script: ${key}`);
+          pkDebug('inventory', `[InventorySync] Deleting old SL script: ${key}`);
           await oldItem.delete();
         }
       } catch (error) {
@@ -703,7 +704,7 @@ export class InventorySyncManager {
       }
     }
 
-    console.log(`[InventorySync] Uploading script: ${key}`);
+    pkDebug('inventory', `[InventorySync] Uploading script: ${key}`);
     const newItem = await slFolder.uploadAsset(
       AssetType.LSLText,
       InventoryType.LSL,
@@ -750,7 +751,7 @@ export class InventorySyncManager {
           : this.localDir;
         const localPath = path.join(entryDir, entry.localFile);
         if (fs.existsSync(localPath)) {
-          console.log(`[InventorySync] Removing deleted item: ${key}`);
+          pkDebug('inventory', `[InventorySync] Removing deleted item: ${key}`);
           await shell.trashItem(localPath);
         }
         delete this.manifest.items[key];
@@ -775,7 +776,7 @@ export class InventorySyncManager {
 
       if (slItem) {
         try {
-          console.log(`[InventorySync] Local file deleted, moving SL item to trash: ${key}`);
+          pkDebug('inventory', `[InventorySync] Local file deleted, moving SL item to trash: ${key}`);
           await slItem.delete(); // moves to Trash, not permanent delete
         } catch (error) {
           console.warn(`[InventorySync] Failed to trash SL item ${key}:`, error);
@@ -800,7 +801,7 @@ export class InventorySyncManager {
       try {
         const entries = fs.readdirSync(localDir);
         if (entries.length === 0) {
-          console.log(`[InventorySync] Removing empty directory: ${localRelPath}`);
+          pkDebug('inventory', `[InventorySync] Removing empty directory: ${localRelPath}`);
           fs.rmdirSync(localDir);
         }
       } catch {
@@ -828,13 +829,13 @@ export class InventorySyncManager {
         if (items.length <= 1) continue;
 
         const prefix = node.relativePath ? `${node.relativePath}/` : '';
-        console.log(`[InventorySync] Found ${items.length} items named "${prefix}${name}", renaming duplicates`);
+        pkDebug('inventory', `[InventorySync] Found ${items.length} items named "${prefix}${name}", renaming duplicates`);
         // Keep the first one as-is, rename the rest
         for (let i = 1; i < items.length; i++) {
           const newName = `${name} (${i + 1})`;
           items[i].name = newName;
           await items[i].update();
-          console.log(`[InventorySync] Renamed to "${prefix}${newName}"`);
+          pkDebug('inventory', `[InventorySync] Renamed to "${prefix}${newName}"`);
         }
       }
     }

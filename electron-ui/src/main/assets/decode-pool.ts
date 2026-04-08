@@ -8,6 +8,7 @@
 import { Worker } from 'worker_threads';
 import * as os from 'os';
 import * as path from 'path';
+import { pkDebug } from '../pk-debug';
 
 const MIN_WORKERS = 2;
 // ~1 max worker per 2GB of system memory, clamped to [4, 12].
@@ -145,7 +146,7 @@ export class DecodePool {
       && !this.destroyed) {
       const entry = this.spawnWorker();
       if (!entry) break;
-      console.log(`[DecodePool] Scaled up to ${this.entries.length} workers (queue=${this.queue.length})`);
+      pkDebug('texture', `[DecodePool] Scaled up to ${this.entries.length} workers (queue=${this.queue.length})`);
     }
 
     while (this.idle.length > 0 && this.queue.length > 0 && !this.destroyed) {

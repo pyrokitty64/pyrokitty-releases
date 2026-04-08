@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 import { getSkeletonHierarchy, getAttachmentPoints } from './mesh-converter';
+import { pkDebug } from '../pk-debug';
 
 const MAX_CONCURRENT = 4;
 
@@ -224,7 +225,7 @@ function convertAnimation(uuid: string, anim: LLAnimation): AnimationData {
   }
 
   if (scrubbed.length > 0) {
-    console.log(`[AnimFetch] ${uuid.slice(0, 8)}: scrubbed ${scrubbed.length} joints: ${scrubbed.join(', ')}`);
+    pkDebug('animation', `[AnimFetch] ${uuid.slice(0, 8)}: scrubbed ${scrubbed.length} joints: ${scrubbed.join(', ')}`);
   }
 
   return {

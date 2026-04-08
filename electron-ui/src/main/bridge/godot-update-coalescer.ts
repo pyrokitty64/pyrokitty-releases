@@ -7,6 +7,7 @@
 
 import type { Subscription } from 'rxjs';
 import { slPos, slQuat, slScale, slVec3 } from './godot-bridge-types';
+import { pkDebug } from '../pk-debug';
 
 export interface UpdateCoalescerDeps {
   /** Check if an object UUID is being tracked */
@@ -112,7 +113,7 @@ export class GodotUpdateCoalescer {
 
       // Log ALL updates for debug target
       if (uid === 'bbafd512-4ab8-9878-0e68-eba086760821') {
-        console.log(`[ObjUpdate] TERSE uuid=${uid.slice(0, 8)} seq=${seq} prevSeq=${prevSeq} pos=[${pos?.x.toFixed(2)},${pos?.y.toFixed(2)},${pos?.z.toFixed(2)}] vel=[${obj.Velocity?.x.toFixed(2)},${obj.Velocity?.y.toFixed(2)},${obj.Velocity?.z.toFixed(2)}]`);
+        pkDebug('objupdate', `[ObjUpdate] TERSE uuid=${uid.slice(0, 8)} seq=${seq} prevSeq=${prevSeq} pos=[${pos?.x.toFixed(2)},${pos?.y.toFixed(2)},${pos?.z.toFixed(2)}] vel=[${obj.Velocity?.x.toFixed(2)},${obj.Velocity?.y.toFixed(2)},${obj.Velocity?.z.toFixed(2)}]`);
       }
 
       // Drop stale updates — only accept newer sequence numbers
@@ -165,7 +166,7 @@ export class GodotUpdateCoalescer {
       // Log ALL updates for debug target
       if (uid === 'bbafd512-4ab8-9878-0e68-eba086760821') {
         const terseGuard = this.updateBuffer.get(uid)?.velocity || this.recentTerse.has(uid);
-        console.log(`[ObjUpdate] FULL uuid=${uid.slice(0, 8)} seq=${seq} prevSeq=${prevSeq} pos=[${pos?.x.toFixed(2)},${pos?.y.toFixed(2)},${pos?.z.toFixed(2)}] vel=[${obj.Velocity?.x.toFixed(2)},${obj.Velocity?.y.toFixed(2)},${obj.Velocity?.z.toFixed(2)}] terseGuard=${terseGuard}`);
+        pkDebug('objupdate', `[ObjUpdate] FULL uuid=${uid.slice(0, 8)} seq=${seq} prevSeq=${prevSeq} pos=[${pos?.x.toFixed(2)},${pos?.y.toFixed(2)},${pos?.z.toFixed(2)}] vel=[${obj.Velocity?.x.toFixed(2)},${obj.Velocity?.y.toFixed(2)},${obj.Velocity?.z.toFixed(2)}] terseGuard=${terseGuard}`);
       }
 
       // Drop stale updates — only accept newer sequence numbers
@@ -176,7 +177,7 @@ export class GodotUpdateCoalescer {
       const isAnimesh = !!(obj.extraParams?.extendedMeshData?.flags & 0x1);
       const wasAnimesh = this.objectAnimeshState.get(uid) ?? false;
       if (isAnimesh !== wasAnimesh) {
-        console.log(`[Animesh] State changed for uuid=${uid}: ${wasAnimesh} → ${isAnimesh}`);
+        pkDebug('animation', `[Animesh] State changed for uuid=${uid}: ${wasAnimesh} → ${isAnimesh}`);
         this.objectAnimeshState.set(uid, isAnimesh);
         this.updateBuffer.delete(uid);
         this.deps.resendObject(obj);
@@ -247,7 +248,7 @@ export class GodotUpdateCoalescer {
     this.updateBuffer.clear();
     this.recentTerse.clear();
     if (this.terseGuardSkips > 0) {
-      console.log(`[ObjUpdate] terse guard skipped position for ${this.terseGuardSkips} objects`);
+      pkDebug('objupdate', `[ObjUpdate] terse guard skipped position for ${this.terseGuardSkips} objects`);
       this.terseGuardSkips = 0;
     }
 

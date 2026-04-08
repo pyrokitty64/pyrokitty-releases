@@ -12,6 +12,7 @@ import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
 type AnimationPacket = { Sender?: { ID?: { toString(): string } }; AnimationList?: { AnimID: { toString(): string }; AnimSequenceID: number }[] };
 import type { AnimationFetchQueue } from '../assets/animation-fetch-queue';
 import type { SendFn } from './godot-bridge-types';
+import { pkDebug } from '../pk-debug';
 
 export class GodotAnimationManager {
   private animRootPending = new Map<string, Set<string>>(); // UUID → set of anim UUIDs needed
@@ -91,16 +92,16 @@ export class GodotAnimationManager {
           sequenceId: a.AnimSequenceID,
         }));
 
-        console.log(`[Animesh] ObjectAnimation received for ${senderUuid.slice(0, 8)}: ${animations.length} anims [${animations.map(a => a.animId.slice(0, 8)).join(', ')}]`);
+        pkDebug('animation', `[Animesh] ObjectAnimation received for ${senderUuid.slice(0, 8)}: ${animations.length} anims [${animations.map(a => a.animId.slice(0, 8)).join(', ')}]`);
 
         this.animeshAnimState.set(senderUuid, animations);
 
         const isKnown = this.animeshObjects.has(senderUuid);
         if (isKnown && this.connected) {
-          console.log(`[Animesh] ObjectAnimation for uuid=${senderUuid.slice(0, 8)}: ${animations.length} anims`);
+          pkDebug('animation', `[Animesh] ObjectAnimation for uuid=${senderUuid.slice(0, 8)}: ${animations.length} anims`);
           this.updateAnimSet(senderUuid, animations.map(a => a.animId));
         } else {
-          console.log(`[Animesh] Buffering ObjectAnimation for ${senderUuid.slice(0, 8)} (known=${isKnown}, connected=${this.connected})`);
+          pkDebug('animation', `[Animesh] Buffering ObjectAnimation for ${senderUuid.slice(0, 8)} (known=${isKnown}, connected=${this.connected})`);
         }
       } catch (err) {
         console.error(`[Animesh] ObjectAnimation handler error:`, (err as Error).message);
@@ -179,7 +180,7 @@ export class GodotAnimationManager {
     // Empty animation set — send empty batch so Godot clears the old animations
     if (needed.size === 0 || !this.animationFetchQueue) {
       this.animRootPending.delete(uuid);
-      console.log(`[Animesh] Sending empty batch for uuid=${uuid.slice(0, 8)} (animations cleared)`);
+      pkDebug('animation', `[Animesh] Sending empty batch for uuid=${uuid.slice(0, 8)} (animations cleared)`);
       this.send({
         type: 'animations_batch',
         uuid,
@@ -218,12 +219,12 @@ export class GodotAnimationManager {
     // Check if this is the self avatar
     let isSelf = false;
     try { isSelf = (uuid === this.bot.agent?.agentID?.toString()); } catch { /* empty */ }
-    console.log(`[Animesh] Batch ready for uuid=${uuid.slice(0, 8)}: ${Object.keys(allData).map(id => id.slice(0, 8)).join(', ')}`);
+    pkDebug('animation', `[Animesh] Batch ready for uuid=${uuid.slice(0, 8)}: ${Object.keys(allData).map(id => id.slice(0, 8)).join(', ')}`);
     if (isSelf) {
       const animSummary = Object.entries(allData).map(([id, d]: [string, any]) =>
         `${id.slice(0, 8)}(${d.joints?.length ?? 0}j,${Number(d.duration).toFixed(1)}s,pri=${d.priority ?? '?'})`
       ).join(', ');
-      console.log(`[SelfAvatar] Animation batch: ${Object.keys(allData).length} animations — ${animSummary}`);
+      pkDebug('animation', `[SelfAvatar] Animation batch: ${Object.keys(allData).length} animations — ${animSummary}`);
     }
     this.send({
       type: 'animations_batch',

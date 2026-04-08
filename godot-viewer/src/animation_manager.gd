@@ -1277,6 +1277,14 @@ func _apply_joint_overrides(glb_skel: Skeleton3D, shared_skel: Skeleton3D, overr
 	if override_count > 0 and not avatar_root_id.is_empty():
 		if sm.avatars.has(avatar_root_id):
 			sm.avatar_mgr._recompute_body_offset(avatar_root_id, shared_skel)
+		else:
+			# Animesh — recalculate pelvis offset after joint overrides may have
+			# changed mPelvis rest position.
+			var _pbi: int = shared_skel.find_bone("mPelvis")
+			if _pbi >= 0:
+				var _pr: Vector3 = shared_skel.get_bone_rest(_pbi).origin
+				shared_skel.position = -_pr
+				sm.animesh_pelvis_offset[avatar_root_id] = -_pr
 
 
 ## Convert a Basis to its rotation quaternion safely.

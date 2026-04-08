@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { WSMessage, WSConnectedMessage, ViewerAPI } from '../../shared/types';
+import { pkDebug } from '../pk-debug';
 
 export interface ViewerConnectionEvents {
   'connected': (apis: ViewerAPI[]) => void;
@@ -262,7 +263,7 @@ export class ViewerConnection extends EventEmitter {
           }
         }
 
-        console.log(`[ViewerConnection ${this.instanceId}] Pump message: ${message.pump}`, message.data);
+        pkDebug('viewer', `[ViewerConnection ${this.instanceId}] Pump message: ${message.pump} ${JSON.stringify(message.data)}`);
         this.emit('message', message.pump, message.data);
         return;
       }

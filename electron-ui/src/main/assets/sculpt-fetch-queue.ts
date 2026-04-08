@@ -8,6 +8,7 @@ import { AssetType } from '../../../node-metaverse/dist/lib';
 import type { Bot } from '../../../node-metaverse/dist/lib';
 import { isSculptCached, sculptCachePath, ensureSculptCached, sculptMeshId } from './sculpt-converter';
 import type { DecodePool } from './decode-pool';
+import { pkDebug } from '../pk-debug';
 
 const MAX_CONCURRENT = 4;
 
@@ -102,7 +103,7 @@ export class SculptFetchQueue {
       const cachePath = await ensureSculptCached(textureUuid, sculptType, j2cBuf, this.decodePool);
       if (!this.destroyed) {
         this.notified.add(dedupKey);
-        console.log(`[SculptFetchQueue] Ready: ${dedupKey}`);
+        pkDebug('sculpt', `[SculptFetchQueue] Ready: ${dedupKey}`);
         this.onReady(dedupKey, cachePath);
         this.onResolved?.(dedupKey);
       }

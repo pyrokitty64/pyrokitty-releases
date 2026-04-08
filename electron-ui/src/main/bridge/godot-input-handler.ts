@@ -15,6 +15,7 @@ import { FilterResponse } from '../../../node-metaverse/dist/lib/enums/FilterRes
 import type { ScriptDialogEvent } from '../../../node-metaverse/dist/lib/events/ScriptDialogEvent';
 import type { LureEvent } from '../../../node-metaverse/dist/lib/events/LureEvent';
 import type { SendFn } from './godot-bridge-types';
+import { pkDebug } from '../pk-debug';
 
 const CLICK_ACTION_SIT = 1;
 
@@ -41,17 +42,17 @@ export class GodotInputHandler {
       return;
     }
     if (this._dbgAgentNullAt !== 0) {
-      console.log(`[GodotBridge] bot.agent restored after ${((Date.now() - this._dbgAgentNullAt) / 1000).toFixed(1)}s`);
+      pkDebug('input', `[GodotBridge] bot.agent restored after ${((Date.now() - this._dbgAgentNullAt) / 1000).toFixed(1)}s`);
       this._dbgAgentNullAt = 0;
     }
 
     const isMoving = msg.forward || msg.backward || msg.strafe_left || msg.strafe_right
       || msg.jump || msg.crouch;
     if (isMoving && !this._dbgMoving) {
-      console.log(`[GodotBridge] Movement started fwd=${msg.forward} back=${msg.backward} sl=${msg.strafe_left} sr=${msg.strafe_right}`);
+      pkDebug('input', `[GodotBridge] Movement started fwd=${msg.forward} back=${msg.backward} sl=${msg.strafe_left} sr=${msg.strafe_right}`);
       this._dbgMoving = true;
     } else if (!isMoving && this._dbgMoving) {
-      console.log(`[GodotBridge] Movement stopped`);
+      pkDebug('input', `[GodotBridge] Movement stopped`);
       this._dbgMoving = false;
     }
 
@@ -95,7 +96,7 @@ export class GodotInputHandler {
       agent.clearControlFlag(ControlFlags.AGENT_CONTROL_FAST_AT);
     }
     if (running !== this._lastRunning) {
-      console.log(`[GodotBridge] Running changed: ${running} — sending SetAlwaysRun`);
+      pkDebug('input', `[GodotBridge] Running changed: ${running} — sending SetAlwaysRun`);
       this._lastRunning = running;
       const runMsg = new SetAlwaysRunMessage();
       runMsg.AgentData = {
@@ -370,7 +371,7 @@ export class GodotInputHandler {
       }
       const localId = obj.ID;
       if (this._sittingOnLocalId === localId) {
-        console.log(`[GodotBridge] Already sitting on ${objectUuid.slice(0, 8)}, ignoring`);
+        pkDebug('input', `[GodotBridge] Already sitting on ${objectUuid.slice(0, 8)}, ignoring`);
         return;
       }
       const targetUuid = new UUID(obj.FullID.toString());
@@ -409,7 +410,7 @@ export class GodotInputHandler {
       const faceIndex = msg.faceIndex || 0;
       const { stCoord, uvCoord } = this._parseSTCoord(msg);
       await this.bot.clientCommands.region.touchObject(localId, faceIndex, stCoord, uvCoord);
-      console.log(`[GodotBridge] Touched object ${objectUuid.slice(0, 8)} face=${faceIndex} st=(${msg.st?.x?.toFixed(2)},${msg.st?.y?.toFixed(2)})`);
+      pkDebug('input', `[GodotBridge] Touched object ${objectUuid.slice(0, 8)} face=${faceIndex} st=(${msg.st?.x?.toFixed(2)},${msg.st?.y?.toFixed(2)})`);
     } catch (e) {
       console.error(`[GodotBridge] object_touch failed for ${msg.uuid}:`, e);
     }
@@ -429,14 +430,14 @@ export class GodotInputHandler {
         const { Vector3 } = await import('../../../node-metaverse/dist/lib/classes/Vector3');
         await this.bot.clientCommands.movement.sitOnObject(new UUID(obj.FullID.toString()), Vector3.getZero());
         this._sittingOnLocalId = obj.ID;
-        console.log(`[GodotBridge] Sat on object ${objectUuid.slice(0, 8)} (ClickAction=Sit)`);
+        pkDebug('input', `[GodotBridge] Sat on object ${objectUuid.slice(0, 8)} (ClickAction=Sit)`);
         return;
       }
 
       const faceIndex = msg.faceIndex || 0;
       const { stCoord, uvCoord } = this._parseSTCoord(msg);
       await this.bot.clientCommands.region.grabObject(obj.ID, faceIndex, stCoord, uvCoord);
-      console.log(`[GodotBridge] touch_start ${objectUuid.slice(0, 8)} face=${faceIndex} st=(${msg.st?.x?.toFixed(2)},${msg.st?.y?.toFixed(2)})`);
+      pkDebug('input', `[GodotBridge] touch_start ${objectUuid.slice(0, 8)} face=${faceIndex} st=(${msg.st?.x?.toFixed(2)},${msg.st?.y?.toFixed(2)})`);
     } catch (e) {
       console.error(`[GodotBridge] object_touch_start failed for ${msg.uuid}:`, e);
     }
@@ -471,7 +472,7 @@ export class GodotInputHandler {
       const faceIndex = msg.faceIndex || 0;
       const { stCoord, uvCoord } = this._parseSTCoord(msg);
       await this.bot.clientCommands.region.deGrabObject(obj.ID, faceIndex, stCoord, uvCoord);
-      console.log(`[GodotBridge] touch_end ${msg.uuid.slice(0, 8)} face=${faceIndex}`);
+      pkDebug('input', `[GodotBridge] touch_end ${msg.uuid.slice(0, 8)} face=${faceIndex}`);
     } catch (e) {
       console.error(`[GodotBridge] object_touch_end failed for ${msg.uuid}:`, e);
     }

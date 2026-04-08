@@ -13,6 +13,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { app } from 'electron';
+import { pkDebug } from '../pk-debug';
 import { EventEmitter } from 'events';
 import { ViewerConnection } from '../network/viewer-connection';
 
@@ -165,7 +166,7 @@ export class VoiceManager extends EventEmitter {
 
     // If position isn't available yet, wait for it (parcel map + position needed for correct parcel ID)
     if (!pos || (pos.x === 0 && pos.y === 0)) {
-      console.log(`${this.tag} Position not available yet, waiting...`);
+      pkDebug('voice', `${this.tag} Position not available yet, waiting...`);
       const resolvedPos = await this.waitForBotPosition(bot, agentId, 10, 500);
       if (resolvedPos) {
         await this.doConnectWithBot(bot, caps, agentId, sessionId, regionName, resolvedPos);
@@ -197,7 +198,7 @@ export class VoiceManager extends EventEmitter {
         attempts++;
         const pos = this.getBotPosition(bot, agentId);
         if (pos) {
-          console.log(`${this.tag} Position available after ${attempts} attempts: (${pos.x?.toFixed(0)},${pos.y?.toFixed(0)})`);
+          pkDebug('voice', `${this.tag} Position available after ${attempts} attempts: (${pos.x?.toFixed(0)},${pos.y?.toFixed(0)})`);
           resolve(pos);
         } else if (attempts >= maxRetries) {
           console.warn(`${this.tag} Position still unavailable after ${attempts} attempts`);
@@ -233,7 +234,7 @@ export class VoiceManager extends EventEmitter {
             const flags = parcel?.ParcelFlags ?? 0;
             const allowVoice = !!(flags & (1 << 29));       // AllowVoiceChat
             const useEstate = !!(flags & (1 << 30));        // UseEstateVoiceChan
-            console.log(`${this.tag} Parcel "${parcel?.Name}" localID=${pid}, allowVoice=${allowVoice}, useEstate=${useEstate}`);
+            pkDebug('voice', `${this.tag} Parcel "${parcel?.Name}" localID=${pid}, allowVoice=${allowVoice}, useEstate=${useEstate}`);
             if (!allowVoice) {
               console.warn(`${this.tag} Voice disabled on this parcel`);
             }
@@ -241,7 +242,7 @@ export class VoiceManager extends EventEmitter {
           }
         }
       }
-      console.log(`${this.tag} Parcel local ID: ${parcelLocalId} (pos=${pos?.x?.toFixed(0) ?? 'N/A'},${pos?.y?.toFixed(0) ?? 'N/A'})`);
+      pkDebug('voice', `${this.tag} Parcel local ID: ${parcelLocalId} (pos=${pos?.x?.toFixed(0) ?? 'N/A'},${pos?.y?.toFixed(0) ?? 'N/A'})`);
     } catch (e) {
       console.warn(`${this.tag} Failed to get parcel local ID:`, e);
     }
@@ -256,7 +257,7 @@ export class VoiceManager extends EventEmitter {
       pos.z || 0,
     ] : undefined;
 
-    console.log(`${this.tag} Region offset: (${regionOffsetX},${regionOffsetY}), global pos: ${globalPos ? `(${globalPos[0].toFixed(0)},${globalPos[1].toFixed(0)},${globalPos[2].toFixed(0)})` : 'N/A'}`);
+    pkDebug('voice', `${this.tag} Region offset: (${regionOffsetX},${regionOffsetY}), global pos: ${globalPos ? `(${globalPos[0].toFixed(0)},${globalPos[1].toFixed(0)},${globalPos[2].toFixed(0)})` : 'N/A'}`);
 
     this.sendCommand({
       cmd: 'connect',
@@ -395,7 +396,7 @@ export class VoiceManager extends EventEmitter {
   }
 
   private handleEvent(event: VoiceEvent): void {
-    console.log(`${this.tag} Event: ${event.event}`, event);
+    pkDebug('voice', `${this.tag} Event: ${event.event} ${JSON.stringify(event)}`);
 
     switch (event.event) {
       case 'ready':
@@ -456,7 +457,7 @@ export class VoiceManager extends EventEmitter {
         if (this._posLogCount < 3) {
           const gx = regionOffsetX + (pos?.x || 0);
           const gy = regionOffsetY + (pos?.y || 0);
-          console.log(`${this.tag} Position: local=(${pos?.x?.toFixed(1)},${pos?.y?.toFixed(1)},${pos?.z?.toFixed(1)}), global=(${gx.toFixed(0)},${gy.toFixed(0)}), region=${regionName}`);
+          pkDebug('voice', `${this.tag} Position: local=(${pos?.x?.toFixed(1)},${pos?.y?.toFixed(1)},${pos?.z?.toFixed(1)}), global=(${gx.toFixed(0)},${gy.toFixed(0)}), region=${regionName}`);
           this._posLogCount++;
         }
 
