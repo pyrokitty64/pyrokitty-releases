@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, Menu, shell } from 'electron';
+import * as path from 'path';
+import { app, ipcMain, BrowserWindow, Menu, shell } from 'electron';
 import { IPC_CHANNELS, AddAccountRequest, LaunchViewerRequest, ChatMessage, SyncStatus, VoiceState, MapMarker, LandmarkInfo } from '../shared/types';
 import { gridManager } from './network/grid-manager';
 import { accountManager } from './network/account-manager';
@@ -7,50 +8,14 @@ import { connectionManager } from './network/viewer-connection';
 import { metaverseConnectionManager } from './network/metaverse-connection';
 import { Vector3, FolderType, AssetType, UUID as NMUUID } from '../../node-metaverse/dist/lib';
 import { chatLogManager } from './ui/chat-log-manager';
-import { InventorySyncManager } from './ui/inventory-sync-manager';
-import { ViewerInventoryAdapter } from './ui/viewer-inventory-adapter';
+// InventorySyncManager replaced by InventoryWalker
 import { voiceRegistry } from './voice/voice-registry';
 import { getMapWindow } from './ui/map-window';
 import { pkDebug } from './pk-debug';
+import { InventoryWalker } from './inventory/inventory-walker';
 
-// Track sync managers per instance
-const syncManagers = new Map<string, InventorySyncManager>();
-
-function getOrCreateSyncManager(instanceId: string, mainWindow: BrowserWindow): InventorySyncManager | null {
-  const cached = syncManagers.get(instanceId);
-  if (cached?.isBackendValid()) return cached;
-  if (cached) { cached.stopWatching(); syncManagers.delete(instanceId); }
-
-  const instance = viewerManager.getInstance(instanceId);
-  if (!instance) return null;
-
-  const onProgress = (progress: SyncStatus) => {
-    mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, { instanceId, ...progress });
-  };
-
-  // Try viewer connection first (takes priority when viewer is running)
-  if (instance.connectionState === 'viewer_connected') {
-    const connection = viewerManager.getConnection(instanceId);
-    if (connection?.isConnected) {
-      const adapter = new ViewerInventoryAdapter(connection);
-      const manager = new InventorySyncManager(adapter, instance.accountId, onProgress);
-      syncManagers.set(instanceId, manager);
-      return manager;
-    }
-  }
-
-  // Fall back to bot (node-metaverse) — only if actually connected
-  const metaverse = metaverseConnectionManager.get(instanceId);
-  const bot = metaverse?.getBot();
-  if (!bot) return null;
-  // throws if this.bot is undefined
-  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-  try { bot.clientCommands; } catch { return null; }
-
-  const manager = new InventorySyncManager(bot, instance.accountId, onProgress);
-  syncManagers.set(instanceId, manager);
-  return manager;
-}
+// Track inventory walkers per instance
+const inventoryWalkers = new Map<string, InventoryWalker>();
 
 function saveChatMessage(instanceId: string, message: ChatMessage): void {
   const instance = viewerManager.getInstance(instanceId);
@@ -375,26 +340,45 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Inventory sync handlers
   ipcMain.handle(IPC_CHANNELS.SYNC_START, async (_, instanceId: string) => {
-    const manager = getOrCreateSyncManager(instanceId, mainWindow);
-    if (!manager) throw new Error('Cannot sync: not connected');
-    // Run sync in background (don't await — progress updates via SYNC_PROGRESS events)
-    manager.sync().then(() => manager.startWatching()).catch(err => console.error('[IPC] Sync error:', err));
+    // Abort any existing walker and start a fresh one
+    const oldWalker = inventoryWalkers.get(instanceId);
+    if (oldWalker) oldWalker.abort();
+
+    const instance = viewerManager.getInstance(instanceId);
+    if (!instance) throw new Error('Cannot sync: no instance');
+    const metaverse = metaverseConnectionManager.get(instanceId);
+    const bot = metaverse?.getBot();
+    if (!bot) throw new Error('Cannot sync: not connected');
+
+    const account = accountManager.getAccount(instance.accountId);
+    const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
+    const walker = new InventoryWalker(bot, folderName, (progress) => {
+      mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, instanceId, {
+        status: progress.phase === 'done' ? 'idle' : 'syncing',
+        message: progress.phase === 'folders'
+          ? `Scanning inventory... ${progress.foldersComplete}/${progress.foldersTotal} folders`
+          : progress.phase === 'items'
+          ? `Syncing items... ${progress.itemsComplete}/${progress.itemsTotal}`
+          : 'Inventory sync complete',
+      });
+    });
+    inventoryWalkers.set(instanceId, walker);
+    walker.walk().catch(err => console.error('[InventoryWalker] Manual sync error:', err));
     return true;
   });
 
-  ipcMain.handle(IPC_CHANNELS.SYNC_GET_STATUS, async (_, instanceId: string) => {
-    const manager = syncManagers.get(instanceId);
-    if (!manager) {
-      return { phase: 'idle', current: 0, total: 0, uploadCost: -1 } as SyncStatus;
-    }
-    return manager.getProgress();
+  ipcMain.handle(IPC_CHANNELS.SYNC_GET_STATUS, async (_, _instanceId: string) => {
+    // Progress comes via SYNC_PROGRESS events from the walker callback
+    return { phase: 'idle', current: 0, total: 0, uploadCost: -1 } as SyncStatus;
   });
 
   ipcMain.handle(IPC_CHANNELS.SYNC_OPEN_FOLDER, async (_, instanceId: string) => {
-    const manager = syncManagers.get(instanceId);
-    if (manager) {
-      shell.openPath(manager.getLocalDir());
-    }
+    const instance = viewerManager.getInstance(instanceId);
+    if (!instance) return;
+    const account = accountManager.getAccount(instance.accountId);
+    const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
+    const dir = path.join(app.getPath('userData'), 'data', 'inventory-sync', folderName);
+    shell.openPath(dir);
   });
 
   // Auto-start sync when metaverse connects
@@ -408,17 +392,35 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
           console.log(`[IPC] Skipping auto-sync: state is now ${instance?.connectionState ?? 'gone'}`);
           return;
         }
-        const manager = getOrCreateSyncManager(instanceId, mainWindow);
-        if (manager) {
-          console.log(`[IPC] Auto-starting inventory sync for ${instanceId}`);
-          manager.sync().then(() => manager.startWatching()).catch(err => console.error('[IPC] Auto-sync error:', err));
+        // Start inventory walker (full inventory mirror to disk)
+        const metaverse = metaverseConnectionManager.get(instanceId);
+        const bot = metaverse?.getBot();
+        if (bot && instance.accountId) {
+          // Abort any previous walker for this instance
+          const oldWalker = inventoryWalkers.get(instanceId);
+          if (oldWalker) oldWalker.abort();
+
+          const account = accountManager.getAccount(instance.accountId);
+          const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
+          const walker = new InventoryWalker(bot, folderName, (progress) => {
+            mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, instanceId, {
+              status: progress.phase === 'done' ? 'idle' : 'syncing',
+              message: progress.phase === 'folders'
+                ? `Scanning inventory... ${progress.foldersComplete}/${progress.foldersTotal} folders`
+                : progress.phase === 'items'
+                ? `Syncing items... ${progress.itemsComplete}/${progress.itemsTotal}`
+                : 'Inventory sync complete',
+            });
+          });
+          inventoryWalkers.set(instanceId, walker);
+          walker.walk().catch(err => console.error('[InventoryWalker] Error:', err));
         }
       }, 2000);
     } else if (state === 'disconnected' || state === 'logging_in' || state === 'viewer_connected') {
-      // Stop watching and clear stale sync manager so a fresh one is created with the appropriate backend
-      const oldManager = syncManagers.get(instanceId);
-      if (oldManager) oldManager.stopWatching();
-      syncManagers.delete(instanceId);
+      // Abort inventory walker
+      const oldWalker = inventoryWalkers.get(instanceId);
+      if (oldWalker) oldWalker.abort();
+      inventoryWalkers.delete(instanceId);
     }
   });
 

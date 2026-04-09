@@ -153,38 +153,83 @@ SL and Godot use different coordinate systems. All positions and rotations are c
 
 Conversion: `position [x, y, z] -> [x, z, -y]`, `quaternion [x, y, z, w] -> [x, z, -y, w]`
 
-### Electron -> Godot
+### Electron → Godot
 
-**Object Lifecycle (Two-Phase):**
-- `object_create` — lightweight placeholder with position, rotation, scale, light info, animesh/sculpt flags
-- `object_complete` — full mesh ID + face materials, sent once all referenced assets are cached on disk
-- `object_update_batch` — batched position/rotation/velocity updates (16ms interval)
-- `object_update_faces` — material/texture changes (PBR async pipeline)
-- `object_kill` — remove objects from scene
+**Object Lifecycle (Single Message):**
+- `object_render` — full object with mesh + all face materials + shape, sent once all assets (mesh, textures) are cached on disk. Electron gates readiness; Godot is a dumb renderer.
+- `object_update_batch` — batched position/rotation/scale changes for static objects (coalesced every 50ms)
+- `object_update_physics` — batched updates for moving objects: velocity, acceleration, angular velocity (high priority)
+- `object_update_faces` — single face/material update after create (PBR materials resolved asynchronously)
+- `object_update_faces_batch` — batched face/material updates
+- `object_kill` — remove object from scene
+- `object_properties` — object name, description, flags, clickAction, ownerID
 
-**Asset Notifications:**
-- `mesh_ready` — GLB file cached to disk, includes rig metadata (joint names, overrides)
-- `texture_ready` — .bctex or .webp file cached to disk
+**Legacy Object Messages (still in Godot, unused by current pipeline):**
+- `object_create` — was phase 1: lightweight placeholder
+- `object_complete` — was phase 2: full mesh + faces
+- `mesh_ready` — was asset notification for GLB files
+- `texture_ready` — was asset notification for textures
 
 **Avatar Lifecycle:**
-- `avatar_create` / `avatar_update_batch` / `avatar_kill` — avatar presence
-- `avatar_shape` — skeleton deformation (bone scales, offsets, volume morphs, hover height)
-- `avatar_chat` / `avatar_typing` — nearby chat and typing indicators
-- `animations_batch` — animation list changes for avatars and animesh
+- `avatar_create` — new avatar: id, localId, name, position, rotation (high priority)
+- `avatar_update` — single avatar position + rotation update (high priority)
+- `avatar_update_batch` — batched avatar position/rotation updates (high priority)
+- `avatar_kill` — remove avatar (high priority)
+- `avatar_shape` — skeleton deformation: bone scales, offsets, volume morphs (high priority)
+- `avatar_chat` — chat bubble text for an avatar
+- `avatar_typing` — typing indicator for an avatar
+
+**Animation:**
+- `animations_batch` — animation set for a skeleton root: localId, animIds[]. Full keyframe data sent once per animation; subsequent batches include stubs (`{id}`) for previously-sent animations.
 
 **Environment:**
-- `terrain_ready` — heightmap + texture map for a region
-- `environment_data` — sky, water, lighting parameters
+- `terrain_ready` — heightmap binary cached to disk, path + waterHeight
+- `environment_data` — sun direction, sunlight color, ambient color from EEP
 
-### Godot -> Electron
+**Session:**
+- `self_id` — identify the bot's own avatar UUID so camera can follow it (high priority)
+- `world_origin` — sets world coordinate origin (X, Y) for region positioning
+- `region_change` — region boundary change notification
+- `settings` — viewer configuration (draw distance, etc.)
+- `electron_stats` — pipeline statistics from Electron side (high priority)
 
-- `input_move` — avatar movement from keyboard/mouse
-- `camera_update` — 3D camera state
-- `object_touch` — object interaction
-- `sit_or_stand` / `stand_up` — seating
-- `texture_request` / `mesh_request` — re-request after cache eviction
-- `pipeline_stats` — rendering metrics (every 5s)
-- `ready` / `quit` — lifecycle signals
+**Interaction:**
+- `pay_options` — payment dialog preset amounts from server
+- `pay_result` — payment transaction result (success/failure)
+- `sitting_state` — avatar sitting state (on object UUID) (high priority)
+- `planar_debug` — debug visualization mode toggle (F9, modes 0-3)
+
+### Godot → Electron
+
+**Input:**
+- `input_move` — WASD/E/C/QE state + camera yaw + fly toggle + running flag → control flags + body rotation
+- `camera_update` — current camera position/rotation (for draw distance, interest list)
+
+**Interaction:**
+- `object_touch` — touch event (instant click on scripted object)
+- `object_touch_start` — touch begin (drag start)
+- `object_touch_move` — touch drag in progress
+- `object_touch_end` — touch end (drag release)
+- `object_sit` — sit on object request
+- `object_pay` — open payment dialog for object
+- `pay_confirm` — confirm payment transaction
+- `stand_up` — stand from sitting
+- `sit_or_stand` — toggle sit/stand
+
+**Object Operations:**
+- `request_object_properties` — request name + description + flags for an object (by localId)
+- `set_object_name` — set object name (from inspector panel)
+- `set_object_description` — set object description (from inspector panel)
+
+**Asset Retry:**
+- `texture_request` — request texture re-fetch (retry)
+- `mesh_request` — request mesh re-fetch (retry)
+
+**Lifecycle:**
+- `ready` — Godot viewport initialized, ready for data
+- `quit` — Godot window closed, Electron should terminate the sidecar
+- `pipeline_stats` — object/texture/mesh/material counts, FPS, finalize timing (every 5s)
+- `window_bounds` — report window position/size changes
 
 ---
 
@@ -195,10 +240,10 @@ Assets flow through parallel fetch queues in the Electron process. Each queue de
 ```
 SL CDN
   │
-  ├─ TextureFetchQueue ─→ J2K decode (WASM OpenJPEG, 4 workers) ─→ GPU compress (BC1/BC3) ─→ .bctex
+  ├─ TextureFetchQueue ─→ J2K decode (WASM OpenJPEG, 8 workers) ─→ GPU compress (BC1/BC3) ─→ .bctex
   ├─ MeshFetchQueue ────→ LLMesh parse ─→ GLB export (mesh-converter.ts) ──────────────────→ .glb
   ├─ SculptFetchQueue ──→ sculpt texture decode ─→ sculpt mesh generation ─────────────────→ .glb
-  ├─ AnimationFetchQueue → BVH binary ─→ disk cache ───────────────────────────────────────→ .anim
+  ├─ AnimationFetchQueue → LLAnimation binary ─→ JSON parse ─→ disk cache ─────────────────→ .json
   └─ MaterialFetchQueue ─→ PBR material definition ─→ resolve textures ─→ object_update_faces
 ```
 
@@ -220,7 +265,7 @@ Avatar rendering spans both Electron (shape computation, animation management) a
 
 **Shape deformation**: Shape slider bytes arrive via `AvatarAppearance` messages. Electron computes bone scales/offsets and volume morph deltas from `avatar_lad.xml`, then sends an `avatar_shape` message to Godot. Godot applies these as global pose overrides each frame.
 
-**Animation**: Animations are evaluated on a background thread in Godot (`animation_manager.gd`). Per-channel priority arbitration (rotation and position independently per joint) matches SL's behavior. Built-in motions (head_rot, eye, breathe) are computed alongside asset animations.
+**Animation**: Animations are evaluated on a background thread in Godot (`animation_manager.gd`). Per-channel priority arbitration (rotation and position independently per joint) matches SL's behavior. Built-in motions (head_rot, eye, breathe) are computed alongside asset animations. Parsed animation JSON is cached to disk (`asset-cache/animations/{uuid}.json`) so subsequent sessions skip the download. Within a session, full keyframe data is sent to Godot only once per animation — subsequent `animations_batch` messages include stubs (`{id}`) for previously-sent animations, keeping typical batch sizes around 1-10 KB even when individual animations can be 100 KB–1 MB+.
 
 **Baked-on-Mesh (BoM)**: The server composites avatar textures (skin, clothing layers) into baked textures. Electron tracks bake completion and updates mesh face textures accordingly.
 
@@ -339,3 +384,151 @@ Detailed documentation for specific subsystems lives in `docs/architecture/`:
 | [child-agents.md](architecture/child-agents.md) | Neighboring region connections |
 | [capabilities.md](architecture/capabilities.md) | Simulator capability URLs |
 | [performance-todo.md](architecture/performance-todo.md) | FSR upscaling and optimization notes |
+
+---
+
+## Detailed File Structure
+
+### Godot Viewer
+
+```
+godot-viewer/
+  project.godot          ← Godot 4.7-dev2 project config (forward_plus renderer)
+  godot-version.txt      ← Engine version string (read by godot-bridge.ts)
+  main.tscn              ← Main scene (Node3D + SceneManager + Camera3D + XROrigin3D + light + env)
+  Godot_v4.7-dev2_mono_win64/  ← Godot engine binary
+  addons/
+    tessarakkt.oceanfft/   ← OceanFFT addon (FFT wave simulation, QuadTree3D LOD)
+      shaders/SurfaceVisual.gdshader  ← Water shader (FFT + custom SSR + refraction)
+      Ocean.tres           ← Material resource with shader parameter defaults
+  tests/
+    test_prim_mesh.gd/.tscn         ← Prim mesh face ordering, normals, vertex bounds
+    test_shader_materials.gd/.tscn  ← Shader compilation, material creation
+    test_camera_controller.gd/.tscn ← Camera input, orbit, follow
+    test_main.gd/.tscn              ← WebSocket server, message dispatch
+    test_xr_rig.gd/.tscn            ← VR rig positioning
+    test_water_setup.gd/.tscn       ← Shader compilation, Ocean3D initialization guards
+    test_object_picker.gd/.tscn     ← GPU ID-buffer + physics raycast picking
+  src/
+    main.gd              ← WebSocket TCP server (1MB buffer), message dispatch, VR init, frame budget
+    scene_manager.gd     ← RSInstance-based object CRUD, flat linkset hierarchy, terrain/water/sky,
+                           occlusion culling loop, distance culling
+    object_manager.gd    ← Avatar/animesh lifecycle, shared skeleton management, shape deformation,
+                           joint overrides, animation evaluation, bone attachment positioning
+    animation_manager.gd ← Animation evaluation, per-channel priority, built-in motions (head_rot)
+    asset_pipeline.gd    ← Texture/mesh loading threads, frame-budgeted finalization, material cache
+    interpolation_manager.gd ← Avatar/object lerp+slerp, physics extrapolation, blend correction
+    light_manager.gd     ← RSLight management, distance culling, projection textures
+    terrain_environment.gd ← Terrain mesh building, environment/sky updates
+    flexi_prim_manager.gd ← Flexi prim Verlet simulation (port of Firestorm's doFlexibleUpdate)
+    name_bubble_manager.gd ← 2D CanvasLayer name bubble overlay (TAA-safe)
+    name_bubble_3d_manager.gd ← 3D Label3D name bubbles (VR mode)
+    object_picker.gd     ← Hybrid GPU ID-buffer + physics raycast picking, occlusion scan compute shader
+    action_bar.gd        ← Context-aware interaction UI (Touch/Sit/Pay/Buy/Edit/Inspect)
+    touch_manager.gd     ← Touch event routing (click, drag start/move/end)
+    avatar_manager.gd    ← Avatar create/update/kill, appearance routing
+    skeleton_builder.gd  ← Parses avatar_skeleton.xml, builds shared Skeleton3D (159 bones)
+    prim_mesh_generator.gd ← Procedural prim geometry from SL shape params (port of LLVolume)
+    camera_controller.gd ← Orbit camera with avatar follow, WASD+Q/E+F input, fly/run/sprint
+    xr_rig.gd            ← XROrigin3D positioning at avatar eye height (VR mode)
+    frame_budget.gd      ← Central timing constants for VR (72Hz) and desktop (30fps) budgets
+    standard_uv.gdshader ← Custom shader for texture rotation + UV transform (opaque)
+    standard_uv_alpha.gdshader ← Same with alpha blending
+    planar_map.gdshader  ← Custom shader for SL planar UV projection (opaque)
+    planar_map_alpha.gdshader ← Same with alpha blending
+    underwater_fog.gdshader ← Underwater fog effect based on wave height
+    occlusion_scan.glsl  ← GPU compute shader for ID-buffer occlusion culling
+```
+
+### Electron Main Process
+
+```
+electron-ui/src/main/
+  index.ts               ← Electron main process entry
+  ipc-handlers.ts        ← IPC channel registration
+
+  bridge/                ← Godot ↔ Electron bridge layer
+    godot-bridge.ts      ← Spawns Godot, WebSocket client, streams scene state, handles input
+    godot-bridge-types.ts ← Type definitions for bridge messages
+    godot-animation-manager.ts ← Animation batching, avatar anim routing
+    godot-avatar-manager.ts ← Avatar lifecycle, BoM substitution, shape data buffering/sending
+    godot-environment-manager.ts ← Environment data (sun, sky, water height)
+    godot-input-handler.ts ← Input event routing (touch, sit, pay, stand, etc.)
+    godot-material-pipeline.ts ← Material pipeline orchestration
+    godot-object-sender.ts ← Object render message formatting
+    godot-update-coalescer.ts ← Batches object updates (50ms coalesce window)
+    object-readiness-tracker.ts ← Tracks asset readiness → object_render
+
+  assets/                ← Asset fetch, decode, and cache
+    animation-fetch-queue.ts ← Animation asset download queue
+    decode-pool.ts       ← Worker thread pool (8 workers) for parallel J2K decode
+    gpu-compress-queue.ts ← Queues RGBA textures for GPU compression, writes .bctex
+    gpu-compress-window.ts ← Hidden BrowserWindow hosting WebGPU compute shader for BC1/BC3
+    j2k-converter.ts     ← J2K decode orchestration (native vs WASM)
+    material-fetch-queue.ts ← PBR material download, LLSD binary → glTF JSON
+    mesh-convert-pool.ts ← Mesh conversion worker pool
+    mesh-convert-worker.ts ← Mesh conversion worker thread
+    mesh-converter.ts    ← LLMesh → GLB (binary glTF 2.0) with joint override extraction
+    mesh-fetch-queue.ts  ← Concurrent mesh download with dedup, disk caching, notify-once
+    sculpt-converter.ts  ← Sculpt map pixel data → vertex positions → GLB
+    sculpt-fetch-queue.ts ← Sculpt texture fetch + conversion to GLB
+    sound-fetch-queue.ts ← Sound asset download queue
+    sound-player.ts      ← Sound playback management
+    texture-decode-worker.ts ← Worker: WASM OpenJPEG decode → sharp
+    texture-fetch-queue.ts ← Concurrent texture download with J2C decode, disk caching
+
+  materials/             ← Viewer-agnostic material resolution
+    material-resolver.ts ← Three-layer priority resolver, always emits alphaMode 0/1/2
+    resolved-material.ts ← Resolved material data structure
+    resolve-face.ts      ← Per-face material resolution logic
+
+  avatar/                ← Avatar-specific logic
+    avatar-shape.ts      ← Parses avatar_lad.xml, computes bone scale/offset from VisualParam bytes
+    display-name-cache.ts ← Display name resolution and caching
+
+  network/               ← SL protocol and connection management
+    metaverse-connection.ts ← SL protocol connection, buffers VisualParams during login
+    account-manager.ts   ← Account login/logout
+    grid-manager.ts      ← Grid configuration
+    scene-manager.ts     ← Object store and scene state
+    viewer-connection.ts ← Firestorm external login handoff
+    viewer-manager.ts    ← Viewer process lifecycle
+
+  ui/                    ← Window management
+    chat-log-manager.ts  ← Chat log persistence
+    inventory-sync-manager.ts ← Inventory sync (texture/notecard/script)
+    map-window.ts        ← 2D map window
+    map3d-window.ts      ← 3D world map window
+    viewer-inventory-adapter.ts ← Inventory data adapter
+    window-state-manager.ts ← Window position/size persistence
+
+  voice/                 ← Voice system
+    voice-manager.ts     ← Voice sidecar lifecycle
+    voice-registry.ts    ← Per-avatar voice state tracking
+```
+
+### Other Electron Source
+
+```
+electron-ui/src/
+  renderer/              ← React 18 + Mantine UI
+    components/          ← Chat, Account, Login, MiniMap, VoiceBar, etc.
+    hooks/               ← useChat, useFriends, useGroups, useNearbyAvatars, etc.
+    styles/              ← CSS
+
+  gpu-compress/          ← WebGPU BC1/BC3 texture compression
+    compress.ts          ← WebGPU compute shader orchestration
+    bc-compress.wgsl     ← WGSL compute shader for BC1/BC3 block compression
+    bctex-format.ts      ← .bctex file format: header + mip chain serialization
+    index.html           ← Minimal HTML for hidden BrowserWindow WebGPU context
+
+  3d-map/                ← Three.js 3D world map
+    index.ts             ← Three.js renderer
+    tile-manager.ts      ← Map tile loading and terrain heightmap management
+    index.html           ← 3D map window HTML
+
+electron-ui/voice/       ← C# .NET 8 voice sidecar (SIPSorcery + Concentus Opus)
+electron-ui/node-metaverse/  ← Bundled SL protocol library (heavily modified)
+electron-ui/data/        ← Grid configs, accounts.json
+electron-ui/scripts/     ← Build, package, test scripts
+```

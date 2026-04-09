@@ -1,5 +1,5 @@
 /**
- * Navigation tools: teleport, walk to, get nearby avatars, get region info
+ * Navigation tools: teleport, walk to, get nearby avatars, get region info, remote parcel info
  */
 
 import type { ToolDef } from './session.js';
@@ -170,6 +170,54 @@ export const navigationTools: ToolDef[] = [
         return { content: [{ type: 'text', text: 'Not connected to a region.' }], isError: true };
       }
       return { content: [{ type: 'text', text: JSON.stringify(info, null, 2) }] };
+    },
+  },
+  {
+    name: 'sl_remote_parcel_info',
+    description: 'Get parcel info (name, snapshot, owner) at a specific location in any region. Provide either region_id or grid_x+grid_y.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        region_id: { type: 'string', description: 'Region UUID (alternative to grid_x+grid_y)' },
+        grid_x: { type: 'number', description: 'Region grid X coordinate (alternative to region_id)' },
+        grid_y: { type: 'number', description: 'Region grid Y coordinate (alternative to region_id)' },
+        x: { type: 'number', description: 'Local X coordinate (0-256)' },
+        y: { type: 'number', description: 'Local Y coordinate (0-256)' },
+        z: { type: 'number', description: 'Local Z coordinate (default: 0)' },
+      },
+      required: ['x', 'y'],
+    },
+    handler: async (args, bot) => {
+      const rawBot = bot.getBot();
+      if (!rawBot) {
+        return { content: [{ type: 'text', text: 'Not logged in.' }], isError: true };
+      }
+
+      const info = await rawBot.clientCommands.parcel.getRemoteParcelInfo({
+        regionId: args.region_id as string | undefined,
+        gridX: args.grid_x as number | undefined,
+        gridY: args.grid_y as number | undefined,
+        x: args.x as number,
+        y: args.y as number,
+        z: (args.z as number) ?? 0,
+      });
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            name: info.ParcelName,
+            description: info.ParcelDescription,
+            snapshotId: info.SnapshotID?.toString(),
+            owner: info.OwnerID?.toString(),
+            area: info.Area,
+            regionName: info.RegionName,
+            globalPos: { x: info.GlobalCoordinates?.x, y: info.GlobalCoordinates?.y, z: info.GlobalCoordinates?.z },
+            dwell: info.Traffic,
+            salePrice: info.SalePrice,
+          }, null, 2),
+        }],
+      };
     },
   },
 ];

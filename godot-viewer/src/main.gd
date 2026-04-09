@@ -50,6 +50,49 @@ func _notification(what: int) -> void:
 			ws_peer.poll()  # flush the send buffer
 		get_tree().quit()
 
+## Read the pyrokitty:item tEXt chunk from a PNG file.
+## Returns the parsed metadata Dictionary, or {} if not found.
+func _read_card_metadata(file_path: String) -> Dictionary:
+	var f := FileAccess.open(file_path, FileAccess.READ)
+	if not f:
+		return {}
+	var sig := f.get_buffer(8)  # PNG signature
+	if sig.size() < 8:
+		return {}
+	var key_bytes := "pyrokitty:item".to_utf8_buffer()
+	while f.get_position() + 8 < f.get_length():
+		var chunk_len := f.get_32()  # big-endian chunk length
+		# Godot's get_32() is little-endian, swap bytes
+		chunk_len = ((chunk_len & 0xFF) << 24) | ((chunk_len & 0xFF00) << 8) | ((chunk_len & 0xFF0000) >> 8) | ((chunk_len & 0xFF000000) >> 24)
+		var chunk_type := f.get_buffer(4).get_string_from_ascii()
+		if chunk_type == "tEXt" and chunk_len > key_bytes.size():
+			var data := f.get_buffer(chunk_len)
+			# Check if this tEXt chunk has our key
+			var found := true
+			for i in key_bytes.size():
+				if data[i] != key_bytes[i]:
+					found = false
+					break
+			if found and data.size() > key_bytes.size() + 1 and data[key_bytes.size()] == 0:
+				var json_str := data.slice(key_bytes.size() + 1).get_string_from_utf8()
+				var parsed: Dictionary = JSON.parse_string(json_str)
+				if not parsed.is_empty():
+					return parsed
+			# Skip CRC
+			f.get_buffer(4)
+		else:
+			# Skip chunk data + CRC
+			f.get_buffer(chunk_len + 4)
+	return {}
+
+func _on_files_dropped(paths: PackedStringArray) -> void:
+	for file_path in paths:
+		if not file_path.ends_with(".png"):
+			continue
+		var metadata := _read_card_metadata(file_path)
+		if not metadata.is_empty():
+			send_message({"type": "inventory_drop", "metadata": metadata})
+
 func _exit_tree() -> void:
 	if ws_peer:
 		ws_peer.close()
@@ -64,6 +107,8 @@ func _ready() -> void:
 	# We handle WM_CLOSE_REQUEST in _notification to send quit to Electron first
 	get_tree().auto_accept_quit = false
 	scene_manager.send_fn = send_message
+	# File drop → extract inventory card metadata → forward to Electron
+	DisplayServer.window_set_drop_files_callback(_on_files_dropped)
 
 	# Crash breadcrumb file — survives process death, tells us the last message processed
 	_breadcrumb_path = OS.get_user_data_dir() + "/crash_breadcrumb.txt"

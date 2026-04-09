@@ -12,6 +12,7 @@ import { LandStatRequestMessage } from '../messages/LandStatRequest';
 import type { LandStatReportType } from '../../enums/LandStatReportType';
 import type { LandStatFlags } from '../../enums/LandStatFlags';
 import type { LandStatsEvent } from '../../events/LandStatsEvent';
+import * as LLSD from '@caspertech/llsd';
 
 // This class was added to provide a new "Category" of commands, since we don't have any parcel specific functionality yet.
 
@@ -35,7 +36,7 @@ export class ParcelCommands extends CommandsBase
 
         this.circuit.sendMessage(msg, PacketFlags.Reliable);
 
-        const parcelInfoReply = (await this.circuit.waitForMessage<ParcelInfoReplyMessage>(Message.ParcelInfoRequest, 10000, (replyMessage: ParcelInfoReplyMessage): FilterResponse =>
+        const parcelInfoReply = (await this.circuit.waitForMessage<ParcelInfoReplyMessage>(Message.ParcelInfoReply, 10000, (replyMessage: ParcelInfoReplyMessage): FilterResponse =>
         {
             if (replyMessage.Data.ParcelID.equals(parcelID))
             {
@@ -59,6 +60,59 @@ export class ParcelCommands extends CommandsBase
             public SalePrice = parcelInfoReply.Data.SalePrice;
             public AuctionID = parcelInfoReply.Data.AuctionID;
         };
+    }
+
+    /**
+     * Look up parcel info at a specific location in any region.
+     * Uses RemoteParcelRequest cap to resolve the parcel UUID,
+     * then ParcelInfoRequest to get full details.
+     *
+     * Accepts either a region UUID or grid coordinates (gridX, gridY).
+     */
+    public async getRemoteParcelInfo(opts: {
+        regionId?: UUID | string;
+        gridX?: number;
+        gridY?: number;
+        x: number;
+        y: number;
+        z?: number;
+    }): Promise<ParcelInfoReplyEvent>
+    {
+        const body: Record<string, unknown> = {
+            location: [opts.x, opts.y, opts.z ?? 0],
+        };
+
+        if (opts.regionId)
+        {
+            const id = typeof opts.regionId === 'string' ? opts.regionId : opts.regionId.toString();
+            body['region_id'] = new LLSD.UUID(id);
+        }
+        else if (opts.gridX !== undefined && opts.gridY !== undefined)
+        {
+            // region_handle is a U64: (globalX << 32) | globalY, encoded as 8-byte binary
+            const globalX = opts.gridX * 256;
+            const globalY = opts.gridY * 256;
+            const octets = [
+                (globalX >>> 24) & 0xff, (globalX >>> 16) & 0xff,
+                (globalX >>> 8) & 0xff, globalX & 0xff,
+                (globalY >>> 24) & 0xff, (globalY >>> 16) & 0xff,
+                (globalY >>> 8) & 0xff, globalY & 0xff,
+            ];
+            body['region_handle'] = new LLSD.Binary(octets);
+        }
+        else
+        {
+            throw new Error('getRemoteParcelInfo requires regionId or gridX+gridY');
+        }
+
+        const result = await this.currentRegion.caps.capsPostXML('RemoteParcelRequest', body);
+        const parcelId = result?.parcel_id?.toString?.() ?? result?.parcel_id;
+        if (!parcelId)
+        {
+            throw new Error('RemoteParcelRequest returned no parcel_id');
+        }
+
+        return this.getParcelInfo(parcelId);
     }
 
     public async getLandStats(parcelID: string | UUID | number, reportType: LandStatReportType, flags: LandStatFlags, filter?: string): Promise<LandStatsEvent>

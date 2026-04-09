@@ -146,7 +146,7 @@ export class TextureFetchQueue {
     // On disk but Godot doesn't know yet — notify once
     if (isTextureCached(textureUuid)) {
       this.notified.add(textureUuid);
-      const ext = cachedTextures.get(textureUuid) || '';
+      const ext = cachedTextures.get(textureUuid)!;
       this.onReady(textureUuid, resolvedCachePath(textureUuid), isExtOpaque(ext));
       this.onResolved?.(textureUuid);
       return;
@@ -171,7 +171,7 @@ export class TextureFetchQueue {
 
     if (isTextureCached(textureUuid)) {
       this.notified.add(textureUuid);
-      const ext = cachedTextures.get(textureUuid) || '';
+      const ext = cachedTextures.get(textureUuid)!;
       this.onReady(textureUuid, resolvedCachePath(textureUuid), isExtOpaque(ext));
       this.onResolved?.(textureUuid);
       return;

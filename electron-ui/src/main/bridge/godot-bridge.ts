@@ -19,6 +19,7 @@ import { app } from 'electron';
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import type { Bot } from '../../../node-metaverse/dist/lib';
+import { Vector3 } from '../../../node-metaverse/dist/lib/classes/Vector3';
 import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
 import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
 import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
@@ -617,9 +618,38 @@ export class GodotBridge extends EventEmitter {
           width: msg.width, height: msg.height,
         });
         break;
+      case 'inventory_drop':
+        this.handleInventoryDrop(msg.metadata);
+        break;
       case 'quit':
         console.log('[GodotBridge] Godot requested immediate quit');
         this.stop();
+        break;
+    }
+  }
+
+  private handleInventoryDrop(metadata: any): void {
+    if (!metadata?.assetType) return;
+    console.log(`[GodotBridge] Inventory drop: ${metadata.assetType} "${metadata.name}"`);
+
+    switch (metadata.assetType) {
+      case 'landmark': {
+        // Parse region + coords from detail line: "RegionName (x, y, z)"
+        const detail = metadata.detail as string | undefined;
+        if (!detail) break;
+        const match = detail.match(/^(.+?)\s*\((\d+),\s*(\d+),\s*(\d+)\)$/);
+        if (!match) break;
+        const [, regionName, x, y, z] = match;
+        console.log(`[GodotBridge] Teleporting to ${regionName} (${x}, ${y}, ${z})`);
+        const pos = new Vector3([parseInt(x), parseInt(y), parseInt(z)]);
+        const lookAt = new Vector3([0, 1, 0]);
+        this.bot.clientCommands.teleport.teleportTo(regionName, pos, lookAt).catch((err: any) => {
+          console.error(`[GodotBridge] Teleport failed:`, err?.message || err);
+        });
+        break;
+      }
+      default:
+        console.log(`[GodotBridge] Unhandled inventory drop type: ${metadata.assetType}`);
         break;
     }
   }

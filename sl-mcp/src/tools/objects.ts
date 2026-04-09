@@ -250,4 +250,65 @@ export const objectTools: ToolDef[] = [
       return { content: [{ type: 'text', text: `Deleted object ${args.localId}` }] };
     },
   },
+  {
+    name: 'sl_probe_inventory_llsd',
+    description: 'Fetch inventory items from a folder by name. Populates the folder from the server and returns parsed item data including thumbnail UUIDs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folderName: { type: 'string', description: 'Name of the folder to fetch (e.g. "Objects")' },
+        itemFilter: { type: 'string', description: 'Optional substring to filter item names' },
+      },
+      required: ['folderName'],
+    },
+    handler: async (args, bot) => {
+      try {
+        const botInstance = (bot as any).getBot();
+        if (!botInstance) throw new Error('Not logged in');
+
+        const skeleton = botInstance.agent.inventory.main.skeleton as Map<any, any>;
+        let targetFolder: any = null;
+        for (const folder of skeleton.values()) {
+          if (folder.name === args.folderName) {
+            // Prefer system folders (typeDefault >= 0) over user-created ones (-1)
+            if (!targetFolder || (targetFolder.typeDefault === -1 && folder.typeDefault >= 0)) {
+              targetFolder = folder;
+            }
+          }
+        }
+        if (!targetFolder) throw new Error(`Folder "${args.folderName}" not found in skeleton`);
+
+        await targetFolder.populate(false);
+
+        let items = (targetFolder.items || []).map((i: any) => ({
+          name: i.name,
+          itemID: i.itemID?.toString(),
+          assetID: i.assetID?.toString(),
+          type: i.type,
+          description: i.description,
+          thumbnailID: i.thumbnailID?.toString() || undefined,
+        }));
+
+        const filter = args.itemFilter as string | undefined;
+        if (filter) {
+          items = items.filter((i: any) => i.name && i.name.includes(filter));
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              folderName: args.folderName,
+              folderId: targetFolder.folderID.toString(),
+              totalItems: targetFolder.items?.length || 0,
+              filteredItems: items.length,
+              items,
+            }, null, 2),
+          }],
+        };
+      } catch (err: any) {
+        return { content: [{ type: 'text', text: `Failed: ${err.message}` }], isError: true };
+      }
+    },
+  },
 ];

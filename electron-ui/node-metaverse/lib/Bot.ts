@@ -76,6 +76,7 @@ export class Bot {
     private _persistentSubNextId = 1;
 
     private _agent?: Agent;
+    private _agentClearedBy?: string;
     private _currentRegion?: Region;
     private _clientCommands?: ClientCommands;
 
@@ -88,7 +89,7 @@ export class Bot {
 
     public get agent(): Agent {
         if (this._agent === undefined) {
-            throw new Error('Internal error - agent is undefined');
+            throw new Error('Internal error - agent is undefined (cleared by: ' + (this._agentClearedBy || 'unknown') + ')');
         }
         return this._agent;
     }
@@ -225,6 +226,7 @@ export class Bot {
         this.stayPosition = new Vector3();
         this.closeCircuit();
         this.agent.shutdown();
+        this._agentClearedBy = 'close()';
         delete this._agent;
         this.disconnected(true, 'Logout completed');
     }
@@ -603,8 +605,10 @@ export class Bot {
     }
 
     private kicked(message: string): void {
+        console.warn('[Bot] kicked:', message, new Error().stack);
         this.closeCircuit();
         this.agent.shutdown();
+        this._agentClearedBy = 'kicked(' + message + ')';
         delete this._agent;
         this.disconnected(false, message);
     }

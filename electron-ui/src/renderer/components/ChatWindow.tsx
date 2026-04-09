@@ -227,7 +227,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           Sync Now
         </button>
         <button className="sync-btn" onClick={openSyncFolder}>
-          Open Folder
+          Inventory
         </button>
       </div>
 

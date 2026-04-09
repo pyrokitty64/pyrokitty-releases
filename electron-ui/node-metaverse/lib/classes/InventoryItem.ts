@@ -42,6 +42,7 @@ export class InventoryItem
     public inventoryType: InventoryType;
     public name: string;
     public metadata: string;
+    public thumbnailID?: UUID;
     public salePrice: number;
     public saleType: number;
     public created: Date;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="{{w}}" height="{{h}}">
+  <rect width="{{w}}" height="{{h}}" fill="#37474F"/>
+  <text x="{{cx}}" y="{{cy}}" text-anchor="middle"
+        font-family="'Segoe UI', Arial, sans-serif" font-size="48"
+        fill="{{color}}" opacity="0.4">?</text>
+</svg>

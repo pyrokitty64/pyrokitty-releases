@@ -665,6 +665,9 @@ export class InventoryFolder
                     item_id: string,
                     desc: string,
                     type: number,
+                    metadata?: {
+                        thumbnail?: { asset_id?: string }
+                    },
                     permissions: {
                         last_owner_id: string,
                         owner_id: string,
@@ -744,6 +747,11 @@ export class InventoryFolder
                     creator: new UUID(item.permissions.creator_id.toString()),
                     group: new UUID(item.permissions.group_id.toString())
                 };
+                const thumbId = item.metadata?.thumbnail?.asset_id;
+                if (thumbId)
+                {
+                    invItem.thumbnailID = new UUID(thumbId.toString());
+                }
                 await this.addItem(invItem, false);
             }
             await this.saveCache();

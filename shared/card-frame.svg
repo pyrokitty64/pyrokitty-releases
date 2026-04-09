@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="{{CARD_W}}" height="{{CARD_H}}">
+  <defs>
+    <clipPath id="cardClip">
+      <rect width="{{CARD_W}}" height="{{CARD_H}}" rx="{{CARD_RADIUS}}" ry="{{CARD_RADIUS}}"/>
+    </clipPath>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&amp;display=swap');
+      .title { font-family: 'Roboto Condensed', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
+      .body  { font-family: 'Roboto Condensed', 'Segoe UI', Arial, sans-serif; font-weight: 400; }
+    </style>
+  </defs>
+
+  <g clip-path="url(#cardClip)">
+    <!-- Card background -->
+    <rect width="{{CARD_W}}" height="{{CARD_H}}" fill="{{CARD_BG}}"/>
+
+    <!-- Color band -->
+    <rect y="0" width="{{CARD_W}}" height="{{BAND_H}}" fill="{{bandColor}}"/>
+    <text x="{{bandTextX}}" y="{{bandTextY}}" text-anchor="middle"
+          class="title" fill="{{bandTextColor}}" font-size="22">{{typeLabel}}</text>
+
+    <!-- Content image border (dark inset) -->
+    <rect x="24" y="{{imageInsetY}}" width="{{imageInsetW}}" height="{{imageInsetH}}"
+          rx="4" ry="4" fill="#263238"/>
+
+    <!-- Divider line -->
+    <line x1="32" y1="{{dividerY}}" x2="{{dividerX2}}" y2="{{dividerY}}"
+          stroke="{{bandColor}}" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Item name -->
+    <text x="{{textCenterX}}" y="{{nameY}}" text-anchor="middle"
+          class="title" fill="#212121" font-size="26">{{name}}</text>
+
+    <!-- Detail line (hidden if empty) -->
+    {{#detail}}
+    <text x="{{textCenterX}}" y="{{detailY}}" text-anchor="middle"
+          class="body" fill="#546E7A" font-size="18">{{detail}}</text>
+    {{/detail}}
+
+    <!-- Permissions (hidden if empty) -->
+    {{#perms}}
+    <text x="{{textCenterX}}" y="{{permsY}}" text-anchor="middle"
+          class="body" fill="#78909C" font-size="15">{{perms}}</text>
+    {{/perms}}
+
+    <!-- Card border (drawn last so it's on top) -->
+    <rect width="{{CARD_W}}" height="{{CARD_H}}" rx="{{CARD_RADIUS}}" ry="{{CARD_RADIUS}}"
+          fill="none" stroke="{{CARD_BORDER_COLOR}}" stroke-width="{{borderStrokeW}}"/>
+  </g>
+</svg>

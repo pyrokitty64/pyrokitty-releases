@@ -101,6 +101,48 @@ npm run build
 
 No separate launch needed — Claude Code starts it automatically via `.mcp.json`.
 
+## Debug Logging (PK_DEBUG)
+
+Both Electron and Godot use tag-based debug logging controlled by the `PK_DEBUG` environment variable. Set it to a comma-separated list of tags, or `all` to enable everything:
+
+```bash
+# Enable specific tags
+PK_DEBUG=alpha,camera,flexi npm start
+
+# Enable all debug output
+PK_DEBUG=all npm start
+```
+
+Available tags:
+
+| Tag | Area |
+|-----|------|
+| `alpha` | Alpha/transparency sorting and material decisions |
+| `animation` | Animation fetching, decoding, and batching |
+| `animesh` | Animesh skeleton creation and rigged mesh binding |
+| `attach` | Attachment point positioning |
+| `avatar` | Avatar appearance, bake-on-mesh, shape data |
+| `avatarshape` | Avatar shape deformation and body offsets |
+| `avatarsit` | Avatar sitting and seat resolution |
+| `bctex` | BC-compressed texture loading |
+| `camera` | Camera movement, running, double-tap |
+| `chat` | Chat message forwarding |
+| `env` | Environment/EEP settings |
+| `flexi` | Flexi prim simulation |
+| `input` | Movement, sit, touch input handling |
+| `ipc` | IPC message routing |
+| `jointoverride` | Joint position override priority |
+| `light` | Light and projector textures |
+| `mesh` | Mesh readiness and delivery |
+| `object` | Object creation and parenting |
+| `selfavatar` | Self-avatar skeleton and animation eval |
+| `terrain` | Terrain tile loading |
+| `texture` | Texture decode pool scaling |
+| `voice` | Voice PTT and sidecar |
+| `water` | Water plane and wave parameters |
+
+In Electron code, use `pkDebug(tag, msg)` from `pk-debug.ts`. In GDScript, use `DebugLog.debug(tag, msg)` (an autoload). Use `pkDebugEnabled(tag)` / `DebugLog.enabled(tag)` to guard expensive string formatting.
+
 ## What is in here
 
 | Directory | What it does |
