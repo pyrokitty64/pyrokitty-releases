@@ -29,7 +29,7 @@ const LOD_PREFERENCE = ['high_lod', 'medium_lod', 'low_lod', 'lowest_lod'];
 
 // --- Avatar skeleton hierarchy (from shared/avatar_skeleton.json) ---
 
-interface SkeletonJoint {
+export interface SkeletonJoint {
   name: string;
   parent: string | null;
   pos: [number, number, number];    // local position in SL coords
@@ -94,7 +94,7 @@ export async function initSkeletonData(): Promise<void> {
  * Maps: bone aliases (from XML) + attachment point names (from LAD) + case-insensitive
  * fallback for skeleton bones/CVs → canonical bone name.
  */
-function getJointAliasMap(): Map<string, string> {
+export function getJointAliasMap(): Map<string, string> {
   if (jointAliasCache) return jointAliasCache;
   jointAliasCache = new Map();
 
@@ -143,7 +143,7 @@ function getJointAliasMap(): Map<string, string> {
 }
 
 /** Resolve a joint name through the alias map. Returns canonical name or original if unknown. */
-function resolveJointName(name: string): string {
+export function resolveJointName(name: string): string {
   const skeleton = getSkeletonHierarchy();
   if (skeleton.has(name)) return name;  // exact match — no alias needed
   const aliases = getJointAliasMap();
@@ -196,7 +196,7 @@ export function parseSkeletonJson(jsonStr: string): Map<string, SkeletonJoint> {
 // M[row][col] = flat[col*4 + row]
 // =====================================================================
 
-const DEG_TO_RAD = Math.PI / 180;
+export const DEG_TO_RAD = Math.PI / 180;
 
 /** Multiply two column-major 4×4 matrices: result = A * B. */
 export function mat4Mul(a: number[], b: number[]): number[] {
@@ -393,7 +393,7 @@ export function computeInvTranspose3x3(m: number[]): number[] {
  * Matches Hippolyzer's JointNode.matrix property:
  *   compose_matrix(scale=scale, angles=rotation/RAD_TO_DEG, translate=translation)
  */
-function jointMatrix(joint: SkeletonJoint): number[] {
+export function jointMatrix(joint: SkeletonJoint): number[] {
   return composeMatrix(
     joint.scale,
     [joint.rot[0] * DEG_TO_RAD, joint.rot[1] * DEG_TO_RAD, joint.rot[2] * DEG_TO_RAD],
@@ -403,7 +403,7 @@ function jointMatrix(joint: SkeletonJoint): number[] {
 
 // --- Blender-compat joint context ---
 
-interface JointContext {
+export interface JointContext {
   nodeIdx: number;
   /** Original joint matrix in SL space (column-major) */
   origMatrix: number[];

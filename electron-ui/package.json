@@ -1,6 +1,6 @@
 {
     "name": "pyrokitty-ui",
-    "version": "0.1.51",
+    "version": "0.1.52",
     "description": "PyroKitty Viewer Manager - Multi-account Second Life/OpenSim launcher",
     "main": "dist/main/index.js",
     "scripts": {
