@@ -340,6 +340,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Inventory sync handlers
   ipcMain.handle(IPC_CHANNELS.SYNC_START, async (_, instanceId: string) => {
+    console.log(`[Sync] Manual SYNC_START for instance=${instanceId}`);
     // Abort any existing walker and start a fresh one
     const oldWalker = inventoryWalkers.get(instanceId);
     if (oldWalker) oldWalker.abort();
@@ -353,15 +354,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     const account = accountManager.getAccount(instance.accountId);
     const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
     const walker = new InventoryWalker(bot, folderName, (progress) => {
-      mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, instanceId, {
-        status: progress.phase === 'done' ? 'idle' : 'syncing',
-        message: progress.phase === 'folders'
-          ? `Scanning inventory... ${progress.foldersComplete}/${progress.foldersTotal} folders`
-          : progress.phase === 'items'
-          ? `Syncing items... ${progress.itemsComplete}/${progress.itemsTotal}`
-          : 'Inventory sync complete',
-      });
+      mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, {
+        instanceId,
+        phase: progress.phase === 'done' ? 'done' : 'downloading',
+        current: progress.phase === 'folders' ? progress.foldersComplete : progress.itemsComplete ?? 0,
+        total: progress.phase === 'folders' ? progress.foldersTotal : progress.itemsTotal ?? 0,
+        uploadCost: -1,
+      } as SyncStatus);
     });
+    walker.enable3dThumbnails = true; // manual sync → allow HUD attach for thumbnails
+    // DEV: restrict to a single folder for thumbnail testing
+    // walker.folderFilter = "TEST OBJECTS";
     inventoryWalkers.set(instanceId, walker);
     walker.walk().catch(err => console.error('[InventoryWalker] Manual sync error:', err));
     return true;
@@ -403,15 +406,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
           const account = accountManager.getAccount(instance.accountId);
           const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
           const walker = new InventoryWalker(bot, folderName, (progress) => {
-            mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, instanceId, {
-              status: progress.phase === 'done' ? 'idle' : 'syncing',
-              message: progress.phase === 'folders'
-                ? `Scanning inventory... ${progress.foldersComplete}/${progress.foldersTotal} folders`
-                : progress.phase === 'items'
-                ? `Syncing items... ${progress.itemsComplete}/${progress.itemsTotal}`
-                : 'Inventory sync complete',
+            mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, {
+              instanceId,
+              phase: progress.phase === 'done' ? 'done' : 'downloading',
+              current: progress.phase === 'folders' ? progress.foldersComplete : progress.itemsComplete,
+              total: progress.phase === 'folders' ? progress.foldersTotal : progress.itemsTotal,
+              uploadCost: -1,
             });
           });
+          // DEV: restrict to a single folder for thumbnail testing
+          // walker.folderFilter = "TEST OBJECTS";
           inventoryWalkers.set(instanceId, walker);
           walker.walk().catch(err => console.error('[InventoryWalker] Error:', err));
         }

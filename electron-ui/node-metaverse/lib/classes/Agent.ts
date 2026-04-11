@@ -107,7 +107,7 @@ export class Agent {
         BuiltInAnimations.FALLDOWN,
     ]);
     // Reverse lookup: UUID -> name for logging
-    private static readonly _animNameLookup: Map<string, string> = (() => {
+    private static readonly _animNameLookup: Map<string, string> = ((): Map<string, string> => {
         const m = new Map<string, string>();
         for (const [name, uuid] of Object.entries(BuiltInAnimations)) {
             if (typeof uuid === 'string') m.set(uuid, name);
@@ -313,7 +313,7 @@ export class Agent {
         this.appearanceComplete = true;
         this.appearanceCompleteEvent.next();
 
-        this.requestServerAppearanceUpdate().catch((err) => {
+        this.requestServerAppearanceUpdate().catch((err: unknown) => {
             console.warn('Server appearance update failed:', err);
         });
     }

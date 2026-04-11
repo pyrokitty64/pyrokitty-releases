@@ -183,18 +183,53 @@ export const objectTools: ToolDef[] = [
   },
   {
     name: 'sl_test_asset_download',
-    description: 'Test downloading an asset by UUID. Returns size on success or error message on failure.',
+    description: 'Test downloading an asset by UUID. Returns size on success or error message on failure. For animation/gesture, returns the raw content as UTF-8 text.',
     inputSchema: {
       type: 'object',
       properties: {
         uuid: { type: 'string', description: 'Asset UUID' },
-        type: { type: 'string', enum: ['texture', 'material'], description: 'Asset type (default: texture)' },
+        type: { type: 'string', enum: ['texture', 'material', 'animation', 'gesture'], description: 'Asset type (default: texture)' },
       },
       required: ['uuid'],
     },
     handler: async (args, bot) => {
-      const result = await bot.testAssetDownload(args.uuid as string, (args.type as 'texture' | 'material') || 'texture');
+      const typeStr = (args.type as string) || 'texture';
+      if (typeStr === 'animation' || typeStr === 'gesture') {
+        const result = await bot.downloadRawAsset(args.uuid as string, typeStr === 'gesture' ? 21 : 20);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+      const result = await bot.testAssetDownload(args.uuid as string, (typeStr as 'texture' | 'material'));
       return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+    },
+  },
+  {
+    name: 'sl_test_attach_and_dump',
+    description: 'Attach an inventory item to HUD, dump its shape/mesh/texture data, save GLB if mesh, then detach.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemId: { type: 'string', description: 'Inventory item UUID' },
+      },
+      required: ['itemId'],
+    },
+    handler: async (args, bot) => {
+      const result = await bot.testAttachAndDump(args.itemId as string);
+      return { content: [{ type: 'text', text: result }] };
+    },
+  },
+  {
+    name: 'sl_test_inventory_object_download',
+    description: 'Test downloading an object asset from inventory by item ID. Returns the XML content or error.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemId: { type: 'string', description: 'Inventory item UUID' },
+      },
+      required: ['itemId'],
+    },
+    handler: async (args, bot) => {
+      const result = await bot.testInventoryObjectDownload(args.itemId as string);
+      return { content: [{ type: 'text', text: result }] };
     },
   },
   {

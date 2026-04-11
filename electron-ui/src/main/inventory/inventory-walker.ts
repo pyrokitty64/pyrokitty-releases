@@ -20,6 +20,9 @@ import type { InventoryFolder } from '../../../node-metaverse/lib/classes/Invent
 import type { InventoryItem } from '../../../node-metaverse/lib/classes/InventoryItem';
 import { renderInventoryCard, readCardMetadata, type CardMetadata } from './inventory-card';
 import { buildLandmarkCard } from './landmark-strategy';
+import { generateObjectThumbnail } from './object-thumbnail-strategy';
+import { generateAnimationThumbnail } from './animation-thumbnail-strategy';
+import { thumbnailWindowAvailable } from '../assets/thumbnail-window';
 import { j2cToPng } from '../assets/j2k-converter';
 import { pkDebug } from '../pk-debug';
 
@@ -202,6 +205,10 @@ export class InventoryWalker {
   private manifestPath: string;
   private aborted = false;
   private onProgress?: (progress: WalkerProgress) => void;
+  /** When set, only process folders whose name matches (case-insensitive). For testing. */
+  folderFilter?: string;
+  /** When true, enable 3D thumbnail generation via HUD attach for objects. Only for manual sync. */
+  enable3dThumbnails = false;
 
   constructor(bot: Bot, accountId: string, onProgress?: (progress: WalkerProgress) => void) {
     this.bot = bot;
@@ -278,6 +285,15 @@ export class InventoryWalker {
           pending.delete(id);
           resolved = true;
 
+          // If folderFilter is set, only include the matching folder and its descendants
+          if (this.folderFilter) {
+            const isMatch = folder.name.toLowerCase() === this.folderFilter.toLowerCase();
+            const parentIncluded = allFolders.some(f => f.folder.folderID.toString() === parentId);
+            if (!isMatch && !parentIncluded) {
+              continue;
+            }
+          }
+
           const priority = FOLDER_PRIORITY[folder.typeDefault as FolderType] ?? DEFAULT_PRIORITY;
           allFolders.push({ folder, path: dirPath, priority });
         }
@@ -340,13 +356,12 @@ export class InventoryWalker {
         pkDebug('inventory', `Failed to sync ${entry.item.name}: ${err.message}`);
       }
       itemsComplete++;
-      // Emit progress every 50 items to avoid spamming
-      if (itemsComplete % 50 === 0 || itemsComplete === itemsTotal) {
-        this.emitProgress({ phase: 'items', foldersTotal, foldersComplete, itemsTotal, itemsComplete });
-      }
+      this.emitProgress({ phase: 'items', foldersTotal, foldersComplete, itemsTotal, itemsComplete });
     };
 
-    await this.runConcurrent(itemQueue, processItem, MAX_CONCURRENT);
+    // When 3D thumbnails are enabled, process items one at a time to avoid
+    // multiple objects attached to HUD simultaneously
+    await this.runConcurrent(itemQueue, processItem, this.enable3dThumbnails ? 1 : MAX_CONCURRENT);
 
     // 5. Save manifest
     await saveManifest(this.manifestPath, this.manifest);
@@ -372,7 +387,14 @@ export class InventoryWalker {
       const fileExists = existsSync(join(dirPath, existing.fileName));
 
       if (assetSame && nameSame && descSame && permsSame && fileExists) {
-        return; // nothing changed, skip
+        // Re-process objects (when 3D thumbnails enabled) or animations (always)
+        // that lack a thumbnail
+        const noThumbId = !item.thumbnailID?.toString() || item.thumbnailID?.toString() === '00000000-0000-0000-0000-000000000000';
+        const needsThumb = noThumbId && (
+          (this.enable3dThumbnails && item.type === AssetType.Object)
+          || item.type === AssetType.Animation
+        );
+        if (!needsThumb) return; // nothing changed, skip
       }
 
       // Something changed — delete the old file if the name changed (new filename)
@@ -408,7 +430,32 @@ export class InventoryWalker {
       }
     } else {
       // Thumbnail takes priority for all card types
-      const thumbnail = await this.fetchThumbnail(item);
+      let thumbnail = await this.fetchThumbnail(item);
+      // For objects without a CDN thumbnail, try 3D rendering
+      pkDebug('inventory', `[Walker] Item "${item.name}": type=${item.type}, assetId=${assetId}`);
+      if (item.type === AssetType.Object && this.enable3dThumbnails) {
+        pkDebug('inventory', `[Walker] Object "${item.name}": itemId=${itemId}, cdnThumb=${!!thumbnail}, thumbWindow=${thumbnailWindowAvailable()}`);
+        if (!thumbnail && thumbnailWindowAvailable()) {
+          try {
+            thumbnail = await generateObjectThumbnail(this.bot, item);
+            if (thumbnail) pkDebug('inventory', `[Walker] 3D thumbnail generated for ${item.name} (${thumbnail.length} bytes)`);
+            else pkDebug('inventory', `[Walker] 3D thumbnail returned null for ${item.name}`);
+          } catch (err: any) {
+            pkDebug('inventory', `[Walker] 3D thumbnail failed for ${item.name}: ${err.message}`);
+          }
+        }
+      }
+      if (item.type === AssetType.Animation) {
+        if (!thumbnail && thumbnailWindowAvailable()) {
+          try {
+            thumbnail = await generateAnimationThumbnail(this.bot, item);
+            if (thumbnail) pkDebug('inventory', `[Walker] Animation thumbnail generated for ${item.name} (${thumbnail.length} bytes)`);
+            else pkDebug('inventory', `[Walker] Animation thumbnail returned null for ${item.name}`);
+          } catch (err: any) {
+            pkDebug('inventory', `[Walker] Animation thumbnail failed for ${item.name}: ${err.message}`);
+          }
+        }
+      }
       if (item.type === AssetType.Landmark) {
         await this.syncLandmark(item, filePath, thumbnail);
       } else {

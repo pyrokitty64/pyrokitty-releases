@@ -125,8 +125,9 @@ export class BotManager {
    */
   async ensureConnected(): Promise<void> {
     if (this.isConnected) return;
+    // Clear kicked state — the caller is explicitly asking to reconnect
     if (this._kickedMessage) {
-      throw new Error(`Bot was disconnected: ${this._kickedMessage}. Use sl_login to reconnect.`);
+      this._kickedMessage = null;
     }
     if (this.loginPromise) {
       await this.loginPromise;
@@ -883,6 +884,19 @@ export class BotManager {
     };
   }
 
+  /** Download a raw asset and return its content as text + hex preview */
+  async downloadRawAsset(uuid: string, assetType: number): Promise<{ ok: boolean; size?: number; text?: string; hexHead?: string; error?: string }> {
+    await this.ensureConnected();
+    try {
+      const buf = await this.bot!.clientCommands.asset.downloadAsset(assetType, uuid);
+      const text = buf.toString('utf-8');
+      const hexHead = buf.subarray(0, Math.min(64, buf.length)).toString('hex');
+      return { ok: true, size: buf.length, text: text.length > 4000 ? text.slice(0, 4000) + '...' : text, hexHead };
+    } catch (err: any) {
+      return { ok: false, error: err.message };
+    }
+  }
+
   /** Try to download an asset by UUID and type. Returns size or error. For materials, also parses and returns PBR data. */
   async testAssetDownload(uuid: string, type: 'texture' | 'material'): Promise<{ ok: boolean; size?: number; error?: string; parsed?: any }> {
     await this.ensureConnected();
@@ -916,6 +930,144 @@ export class BotManager {
       return result;
     } catch (err: any) {
       return { ok: false, error: err?.message || String(err) };
+    }
+  }
+
+  /** Attach an inventory item to HUD, dump all its data, save GLB if mesh, then detach. */
+  async testAttachAndDump(itemId: string): Promise<string> {
+    await this.ensureConnected();
+    const lines: string[] = [];
+    try {
+      const { UUID } = await import('../../electron-ui/node-metaverse/dist/lib/classes/UUID.js');
+      const { AttachmentPoint } = await import('../../electron-ui/node-metaverse/dist/lib/enums/AttachmentPoint.js');
+      const { AssetType } = await import('../../electron-ui/node-metaverse/dist/lib/enums/AssetType.js');
+      const { SculptType } = await import('../../electron-ui/node-metaverse/dist/lib/enums/SculptType.js');
+
+      // Fetch the inventory item
+      const item = await this.bot!.agent.inventory.fetchInventoryItem(new UUID(itemId));
+      if (!item) return 'Item not found';
+      const originalFlags = item.flags;
+      lines.push(`Item: ${item.name} (type=${item.type})`);
+      lines.push(`Original flags: 0x${originalFlags.toString(16)} (attach point: ${originalFlags & 0xff})`);
+
+      // Attach to HUD
+      lines.push('Attaching to HUD Center 2...');
+      const rootObj = await item.attachToAvatar(AttachmentPoint.HUDCenter2, 15000);
+      lines.push(`Attached! LocalID=${rootObj.ID}, FullID=${rootObj.FullID}`);
+
+      // Wait for children
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Populate children
+      this.bot!.currentRegion.objects.populateChildren(rootObj);
+      const children = rootObj.children || [];
+      lines.push(`Children: ${children.length}`);
+
+      // Dump root prim data
+      const dumpPrim = (obj: any, label: string) => {
+        lines.push(`\n--- ${label} ---`);
+        lines.push(`  Name: ${obj.name}`);
+        lines.push(`  Scale: ${obj.Scale ? `(${obj.Scale.x.toFixed(3)}, ${obj.Scale.y.toFixed(3)}, ${obj.Scale.z.toFixed(3)})` : 'null'}`);
+        lines.push(`  Position: ${obj.Position ? `(${obj.Position.x.toFixed(3)}, ${obj.Position.y.toFixed(3)}, ${obj.Position.z.toFixed(3)})` : 'null'}`);
+
+        // Mesh?
+        const md = obj.extraParams?.meshData;
+        if (md && md.type === SculptType.Mesh) {
+          lines.push(`  MESH: uuid=${md.meshData?.toString()}`);
+        }
+        // Sculpt?
+        const sd = obj.extraParams?.sculptData;
+        if (sd) {
+          lines.push(`  SCULPT: texture=${sd.texture?.toString()} type=${sd.type}`);
+        }
+        // Prim shape?
+        if (!md && !sd) {
+          lines.push(`  PRIM: pathCurve=${obj.PathCurve} profileCurve=${obj.ProfileCurve}`);
+        }
+
+        // Textures
+        const te = obj.TextureEntry;
+        if (te) {
+          const defaultTex = te.defaultTexture?.textureID?.toString();
+          lines.push(`  DefaultTexture: ${defaultTex || 'none'}`);
+          if (te.faces) {
+            for (let i = 0; i < te.faces.length; i++) {
+              const f = te.faces[i];
+              if (f && f.textureID) {
+                lines.push(`  Face[${i}]: ${f.textureID.toString()}`);
+              }
+            }
+          }
+        } else {
+          lines.push(`  TextureEntry: null`);
+        }
+      };
+
+      dumpPrim(rootObj, 'Root');
+      for (let i = 0; i < children.length; i++) {
+        dumpPrim(children[i], `Child ${i}`);
+      }
+
+      // If root is mesh, download and save GLB
+      const md = rootObj.extraParams?.meshData;
+      if (md && md.type === SculptType.Mesh) {
+        const meshUuid = md.meshData?.toString();
+        if (meshUuid) {
+          try {
+            const { LLMesh } = await import('../../electron-ui/node-metaverse/dist/lib/classes/public/LLMesh.js');
+            const { llMeshToGlb, initSkeletonData } = await import('../../electron-ui/dist/main/index.js').catch(() => ({ llMeshToGlb: null, initSkeletonData: null }));
+
+            const meshBuf = await this.bot!.clientCommands.asset.downloadAsset(AssetType.Mesh, meshUuid);
+            lines.push(`\nMesh downloaded: ${meshBuf.length} bytes`);
+
+            const llMesh = await LLMesh.from(meshBuf);
+            lines.push(`LODs: ${Object.keys(llMesh.lodLevels).join(', ')}`);
+            for (const [lod, submeshes] of Object.entries(llMesh.lodLevels)) {
+              if (Array.isArray(submeshes)) {
+                lines.push(`  ${lod}: ${submeshes.length} submeshes`);
+                for (let si = 0; si < submeshes.length; si++) {
+                  const s = submeshes[si];
+                  lines.push(`    [${si}] verts=${s.position?.length || 0} tris=${(s.triangleList?.length || 0)/3} weights=${s.weights?.length || 0}`);
+                }
+              }
+            }
+
+            // Save raw mesh data for inspection
+            const fs = await import('fs');
+            fs.writeFileSync('test_dress_mesh.bin', meshBuf);
+            lines.push('Saved raw mesh to test_dress_mesh.bin');
+
+          } catch (err: any) {
+            lines.push(`Mesh download/parse error: ${err.message}`);
+          }
+        }
+      }
+
+      // Detach
+      await item.detachFromAvatar();
+      lines.push('\nDetached.');
+
+    } catch (err: any) {
+      lines.push(`ERROR: ${err.message}`);
+    }
+    return lines.join('\n');
+  }
+
+  /** Test downloading an object asset from inventory by item ID. */
+  async testInventoryObjectDownload(itemId: string): Promise<string> {
+    await this.ensureConnected();
+    try {
+      const { UUID } = await import('../../electron-ui/node-metaverse/dist/lib/classes/UUID.js');
+      const buf = await this.bot!.clientCommands.asset.downloadInventoryAsset(
+        new UUID(itemId),
+        this.bot!.agent.agentID,
+        AssetType.Object,
+        true,
+      );
+      const xml = buf.toString('utf8');
+      return `Downloaded ${buf.length} bytes:\n${xml.slice(0, 2000)}${xml.length > 2000 ? '...(truncated)' : ''}`;
+    } catch (err: any) {
+      return `Download failed: ${err?.message || String(err)}`;
     }
   }
 

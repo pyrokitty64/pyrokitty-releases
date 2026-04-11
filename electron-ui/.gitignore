@@ -11,3 +11,4 @@ voice-staging/
 node-metaverse/lib/classes/cache/
 .build-host
 test-card-*.png
+test-*-*.ts

@@ -12,6 +12,7 @@ import { set3DMapWindow, get3DMapWindow } from './ui/map3d-window';
 import { voiceRegistry } from './voice/voice-registry';
 import { InventoryFolder } from '../../node-metaverse/dist/lib/classes/InventoryFolder';
 import { initGpuCompressWindow, destroyGpuCompressWindow } from './assets/gpu-compress-window';
+import { initThumbnailWindow, destroyThumbnailWindow } from './assets/thumbnail-window';
 import { getSavedBounds, trackWindow } from './ui/window-state-manager';
 import { ensureDotnet } from './dotnet-check';
 
@@ -168,6 +169,7 @@ async function performCleanup(): Promise<void> {
   console.log('[App] Logging out from SL and cleaning up...');
   chatLogManager.flushAll();
   destroyGpuCompressWindow();
+  destroyThumbnailWindow();
   await viewerManager.stopAll();
   console.log('[App] Cleanup complete');
 }
@@ -201,6 +203,11 @@ async function createWindow(): Promise<void> {
   // Initialize GPU compression (hidden BrowserWindow for WebGPU)
   initGpuCompressWindow().catch((err) => {
     console.warn('[App] GPU compression init failed (will use CPU fallback):', err.message);
+  });
+
+  // Initialize thumbnail renderer (hidden BrowserWindow for Three.js)
+  initThumbnailWindow().catch((err) => {
+    console.warn('[App] Thumbnail renderer init failed:', err.message);
   });
 
   // Initialize managers
@@ -426,6 +433,7 @@ async function createWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   console.log(`[PyroKitty] v${app.getVersion()} (${app.isPackaged ? 'packaged' : 'dev'})`);
+  // if (app.isPackaged) Menu.setApplicationMenu(null);
   await ensureDotnet();
   createWindow();
 });

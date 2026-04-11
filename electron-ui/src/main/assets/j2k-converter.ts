@@ -54,6 +54,41 @@ export async function j2cToPng(j2cBuffer: Buffer): Promise<Buffer> {
   }
 }
 
+/** Decode a J2C/J2K buffer to raw RGBA pixels (for sculpt maps etc.) */
+export async function j2cToRaw(j2cBuffer: Buffer): Promise<{ pixels: Buffer; width: number; height: number; channels: number }> {
+  await loadWasm();
+  const decoder = new wasmModule.J2KDecoder();
+  try {
+    const encoded = j2cBuffer.buffer.slice(j2cBuffer.byteOffset, j2cBuffer.byteOffset + j2cBuffer.byteLength);
+    const encodedBuffer = decoder.getEncodedBuffer(encoded.byteLength);
+    encodedBuffer.set(new Uint8Array(encoded));
+    decoder.decode();
+
+    const frameInfo = decoder.getFrameInfo();
+    const { width, height, componentCount } = frameInfo;
+    const decodedView = decoder.getDecodedBuffer();
+    let pixels = Buffer.from(decodedView);
+    let channels = componentCount;
+
+    if (componentCount > 4) {
+      const pixelCount = width * height;
+      const rgba = Buffer.allocUnsafe(pixelCount * 4);
+      for (let i = 0; i < pixelCount; i++) {
+        rgba[i * 4]     = pixels[i * componentCount];
+        rgba[i * 4 + 1] = pixels[i * componentCount + 1];
+        rgba[i * 4 + 2] = pixels[i * componentCount + 2];
+        rgba[i * 4 + 3] = pixels[i * componentCount + 3];
+      }
+      pixels = rgba;
+      channels = 4;
+    }
+
+    return { pixels, width, height, channels };
+  } finally {
+    decoder.delete();
+  }
+}
+
 /** Convert a PNG buffer to J2C/J2K via sharp → raw pixels → WASM encode */
 export async function pngToJ2c(pngBuffer: Buffer): Promise<Buffer> {
   await loadWasm();

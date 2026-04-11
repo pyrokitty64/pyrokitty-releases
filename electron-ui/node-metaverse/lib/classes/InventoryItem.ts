@@ -742,6 +742,39 @@ export class InventoryItem
     }
 
     // noinspection JSUnusedGlobalSymbols
+    /**
+     * Upload a J2K thumbnail image for this inventory item via the InventoryThumbnailUpload capability.
+     * Two-step process: POST item_id to get uploader URL, then POST J2K bytes to uploader.
+     */
+    public async uploadThumbnail(j2kBuffer: Buffer): Promise<{ success: boolean; assetId?: string; error?: string }>
+    {
+        if (this.agent === undefined)
+        {
+            throw new Error('This inventory item was created locally. Please import to the grid.');
+        }
+        const caps = this.agent.currentRegion.caps;
+        const initData = { item_id: new LLSD.UUID(this.itemID.toString()) };
+        const initResult = await caps.capsPostXML('InventoryThumbnailUpload', initData);
+        if (!initResult?.uploader)
+        {
+            return { success: false, error: 'No uploader URL in cap response' };
+        }
+        const uploadResult = await caps.requestPost(initResult.uploader, j2kBuffer, 'application/jp2');
+        if (uploadResult.status < 200 || uploadResult.status > 299)
+        {
+            return { success: false, error: `HTTP ${uploadResult.status}` };
+        }
+        // Parse response for asset_id
+        let assetId: string | undefined;
+        try
+        {
+            const parsed = JSON.parse(uploadResult.body);
+            assetId = parsed?.new_asset;
+        }
+        catch { /* response may not be JSON */ }
+        return { success: true, assetId };
+    }
+
     public async detachFromAvatar(): Promise<void>
     {
         if (this.agent === undefined)

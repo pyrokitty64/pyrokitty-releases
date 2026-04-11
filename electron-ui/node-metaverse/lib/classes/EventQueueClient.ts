@@ -576,7 +576,7 @@ export class EventQueueClient
             {
                 this.Get();
             }
-        }).catch(() =>
+        }).catch((err: any) =>
         {
             const time = (new Date().getTime()) - startTime;
             if (time > 30000)
@@ -591,7 +591,9 @@ export class EventQueueClient
             {
                 if (!this.done)
                 {
-                    console.error('Event queue aborted after ' + time + 'ms. Reconnecting in 5 seconds');
+                    const status = err?.response?.statusCode ?? 'no status';
+                    const body = (err?.response?.body ?? '').toString().slice(0, 200);
+                    console.error(`Event queue aborted after ${time}ms (${status}${body ? ': ' + body : ''}). Reconnecting in 5 seconds`);
 
                     // Wait 5 seconds before retrying
                     setTimeout(() =>

@@ -299,32 +299,31 @@ export class InventorySyncManager {
     console.log(`[InventorySync] Downloading ${toDownload.length} items`);
     this.setProgress({ phase: 'downloading', current: 0, total: toDownload.length });
 
-    // Download with concurrency limit
+    // Download with concurrency limit, updating progress per item
     let completed = 0;
     for (let i = 0; i < toDownload.length; i += CONCURRENT_DOWNLOADS) {
       const batch = toDownload.slice(i, i + CONCURRENT_DOWNLOADS);
       const results = await Promise.allSettled(
-        batch.map(({ item, node }) => {
-          if (item.type === AssetType.Notecard) {
-            return this.downloadOneNotecard(item, node.relativePath, node.localDir);
+        batch.map(async ({ item, node }) => {
+          try {
+            if (item.type === AssetType.Notecard) {
+              return await this.downloadOneNotecard(item, node.relativePath, node.localDir);
+            }
+            if (item.type === AssetType.LSLText) {
+              return await this.downloadOneScript(item, node.relativePath, node.localDir);
+            }
+            return await this.downloadOne(item, node.relativePath, node.localDir);
+          } finally {
+            completed++;
+            this.setProgress({ phase: 'downloading', current: completed, total: toDownload.length });
           }
-          if (item.type === AssetType.LSLText) {
-            return this.downloadOneScript(item, node.relativePath, node.localDir);
-          }
-          return this.downloadOne(item, node.relativePath, node.localDir);
         })
       );
 
       for (const result of results) {
-        completed++;
         if (result.status === 'rejected') {
           console.error('[InventorySync] Download failed:', result.reason);
         }
-        this.setProgress({
-          phase: 'downloading',
-          current: completed,
-          total: toDownload.length,
-        });
       }
 
       if (i + CONCURRENT_DOWNLOADS < toDownload.length) {

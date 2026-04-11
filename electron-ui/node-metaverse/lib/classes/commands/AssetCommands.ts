@@ -23,6 +23,23 @@ import { Logger } from '../Logger';
 
 export class AssetCommands extends CommandsBase
 {
+    private static readonly ASSET_CDN = 'http://asset-cdn.glb.agni.lindenlab.com';
+
+    /**
+     * Download a texture as raw J2K from the public SL asset CDN.
+     * No auth, no sim connection required. Static URL.
+     */
+    public static async downloadTextureCDN(uuid: string): Promise<Buffer>
+    {
+        const url = `${AssetCommands.ASSET_CDN}/?texture_id=${uuid}`;
+        const resp = await fetch(url);
+        if (!resp.ok)
+        {
+            throw new Error(`CDN download failed for ${uuid}: HTTP ${resp.status}`);
+        }
+        return Buffer.from(await resp.arrayBuffer());
+    }
+
     public async downloadAsset(type: AssetType, uuid: UUID | string): Promise<Buffer>
     {
         if (typeof uuid === 'string')
