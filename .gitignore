@@ -165,3 +165,12 @@ Hippolyzer
 TODO*.md
 *.local
 .vite
+
+unreal-viewer/Intermediate/
+unreal-viewer/Saved/
+unreal-viewer/Binaries/
+unreal-viewer/DerivedDataCache/
+unreal-viewer/.vs/
+unreal-viewer/*.sln
+unreal-viewer/Plugins/glTFRuntime/Intermediate/
+unreal-viewer/Plugins/glTFRuntime/Binaries/
