@@ -8,15 +8,47 @@
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 
+// ─── Helper: extract raw Godot-space vectors from JSON (no Unreal conversion) ───
+
+static FVector GodotPosFromJson(const TSharedPtr<FJsonObject>& Json, const FString& Field = TEXT("position"))
+{
+	const TArray<TSharedPtr<FJsonValue>>* Arr;
+	if (Json->TryGetArrayField(Field, Arr) && Arr->Num() >= 3)
+	{
+		return FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+	}
+	return FVector::ZeroVector;
+}
+
+static FQuat GodotRotFromJson(const TSharedPtr<FJsonObject>& Json, const FString& Field = TEXT("rotation"))
+{
+	const TArray<TSharedPtr<FJsonValue>>* Arr;
+	if (Json->TryGetArrayField(Field, Arr) && Arr->Num() >= 4)
+	{
+		return FQuat((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber(), (*Arr)[3]->AsNumber());
+	}
+	return FQuat::Identity;
+}
+
+static FVector GodotScaleFromJson(const TSharedPtr<FJsonObject>& Json, const FString& Field = TEXT("scale"))
+{
+	const TArray<TSharedPtr<FJsonValue>>* Arr;
+	if (Json->TryGetArrayField(Field, Arr) && Arr->Num() >= 3)
+	{
+		return FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+	}
+	return FVector(0.5, 0.5, 0.5);
+}
+
+// ─── Lifecycle ──────────────────────────────────────────
+
 void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 {
-	// Declare dependencies — ensures these subsystems initialize before us
 	Collection.InitializeDependency<USLWebSocketServer>();
 	Collection.InitializeDependency<USLGlbLoader>();
 
 	Super::Initialize(Collection);
 
-	// Get sibling subsystems (guaranteed to exist now)
 	UGameInstance* GI = GetGameInstance();
 	WebSocket = GI->GetSubsystem<USLWebSocketServer>();
 	GlbLoader = GI->GetSubsystem<USLGlbLoader>();
@@ -27,7 +59,6 @@ void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	// Subscribe to WebSocket messages
 	MessageHandle = WebSocket->OnJsonMessage.AddLambda(
 		[this](const FString& Type, const TSharedPtr<FJsonObject>& Json)
 		{
@@ -50,6 +81,10 @@ void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 			else if (Type == TEXT("avatar_create") || Type == TEXT("avatar_update") || Type == TEXT("avatar_update_batch"))
 			{
 				HandleAvatarUpdate(Json);
+			}
+			else if (Type == TEXT("terrain_ready"))
+			{
+				HandleTerrainReady(Json);
 			}
 			else if (Type == TEXT("region_change"))
 			{
@@ -76,6 +111,80 @@ void USLObjectManager::Deinitialize()
 	Super::Deinitialize();
 }
 
+// ─── Region offsets ─────────────────────────────────────
+
+void USLObjectManager::HandleTerrainReady(const TSharedPtr<FJsonObject>& Json)
+{
+	FString CacheId;
+	if (!Json->TryGetStringField(TEXT("cacheID"), CacheId) || CacheId.IsEmpty())
+	{
+		return;
+	}
+
+	double OffsetX = 0, OffsetY = 0;
+	Json->TryGetNumberField(TEXT("offsetX"), OffsetX);
+	Json->TryGetNumberField(TEXT("offsetY"), OffsetY);
+
+	// Store as Godot-space offset: SL X → Godot X, SL Y(north) → Godot -Z
+	const FVector GodotOffset(OffsetX, 0.0, -OffsetY);
+	RegionOffsets.Add(CacheId, GodotOffset);
+
+	UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Region offset: cacheID=%s offset=(%.0f, %.0f) godot=(%.0f, 0, %.0f)"),
+		*CacheId.Left(8), OffsetX, OffsetY, GodotOffset.X, GodotOffset.Z);
+}
+
+// ─── Transform computation (mirrors Godot object_manager.gd) ────
+
+FTransform USLObjectManager::ComputeWorldTransform(const TSharedPtr<FJsonObject>& Json, const FString& ParentUuid)
+{
+	const FVector GodotPos = GodotPosFromJson(Json);
+	const FQuat GodotRot = GodotRotFromJson(Json);
+	const FVector GodotScale = GodotScaleFromJson(Json);
+
+	FVector WorldGodotPos;
+	FQuat WorldGodotRot;
+
+	if (!ParentUuid.IsEmpty())
+	{
+		// Child prim — position is parent-relative offset
+		// World pos = parent.pos + parent.rot * offset
+		const FVector* ParentPos = GodotPositions.Find(ParentUuid);
+		const FQuat* ParentRot = GodotRotations.Find(ParentUuid);
+
+		if (ParentPos && ParentRot)
+		{
+			WorldGodotPos = *ParentPos + *ParentRot * GodotPos;
+			WorldGodotRot = *ParentRot * GodotRot;
+		}
+		else
+		{
+			// Parent hasn't arrived — use offset as-is (will be corrected on resolve)
+			WorldGodotPos = GodotPos;
+			WorldGodotRot = GodotRot;
+		}
+	}
+	else
+	{
+		// Root prim — region-local position + region offset
+		FString CacheId;
+		Json->TryGetStringField(TEXT("cacheID"), CacheId);
+		const FVector* Offset = CacheId.IsEmpty() ? nullptr : RegionOffsets.Find(CacheId);
+		const FVector RegionOffset = Offset ? *Offset : FVector::ZeroVector;
+
+		WorldGodotPos = GodotPos + RegionOffset;
+		WorldGodotRot = GodotRot;
+	}
+
+	// Convert Godot-space → Unreal-space
+	const FVector UnrealPos = SLCoord::Position(WorldGodotPos.X, WorldGodotPos.Y, WorldGodotPos.Z);
+	const FQuat UnrealRot = SLCoord::Rotation(WorldGodotRot.X, WorldGodotRot.Y, WorldGodotRot.Z, WorldGodotRot.W);
+	const FVector UnrealScale = SLCoord::Scale(GodotScale.X, GodotScale.Y, GodotScale.Z);
+
+	return FTransform(UnrealRot, UnrealPos, UnrealScale);
+}
+
+// ─── Object render ──────────────────────────────────────
+
 void USLObjectManager::HandleObjectRender(const TSharedPtr<FJsonObject>& Json)
 {
 	FString Uuid;
@@ -84,63 +193,104 @@ void USLObjectManager::HandleObjectRender(const TSharedPtr<FJsonObject>& Json)
 		return;
 	}
 
-	// Skip if already spawned
 	if (Objects.Contains(Uuid))
 	{
 		return;
 	}
 
-	// Get mesh path — objects without meshPath are procedural prims (skip for now)
-	FString MeshPath;
-	FString MeshId;
+	FString ParentUuid;
+	Json->TryGetStringField(TEXT("parentUuid"), ParentUuid);
+
+	// If this is a child and parent hasn't arrived yet, defer it
+	if (!ParentUuid.IsEmpty() && !GodotPositions.Contains(ParentUuid))
+	{
+		PendingChildren.FindOrAdd(ParentUuid).Add(Uuid);
+		PendingChildJson.Add(Uuid, Json);
+		return;
+	}
+
+	// Get mesh path
+	FString MeshPath, MeshId;
 	if (!Json->TryGetStringField(TEXT("meshPath"), MeshPath) || MeshPath.IsEmpty())
 	{
 		SkippedNoMeshCount++;
+		// Still store position so children can reference us as parent
+		const FVector GodotPos = GodotPosFromJson(Json);
+		const FQuat GodotRot = GodotRotFromJson(Json);
+		FVector WorldPos = GodotPos;
+		FQuat WorldRot = GodotRot;
+		if (!ParentUuid.IsEmpty())
+		{
+			const FVector* PP = GodotPositions.Find(ParentUuid);
+			const FQuat* PR = GodotRotations.Find(ParentUuid);
+			if (PP && PR) { WorldPos = *PP + *PR * GodotPos; WorldRot = *PR * GodotRot; }
+		}
+		else
+		{
+			FString CacheId; Json->TryGetStringField(TEXT("cacheID"), CacheId);
+			const FVector* Off = CacheId.IsEmpty() ? nullptr : RegionOffsets.Find(CacheId);
+			if (Off) WorldPos = GodotPos + *Off;
+		}
+		GodotPositions.Add(Uuid, WorldPos);
+		GodotRotations.Add(Uuid, WorldRot);
+		ResolvePendingChildren(Uuid);
 		return;
 	}
 	Json->TryGetStringField(TEXT("meshId"), MeshId);
-	if (MeshId.IsEmpty())
-	{
-		// Fall back to meshPath as cache key
-		MeshId = MeshPath;
-	}
+	if (MeshId.IsEmpty()) MeshId = MeshPath;
 
-	// Load mesh (cached by meshId)
 	UStaticMesh* Mesh = GlbLoader->LoadMesh(MeshId, MeshPath);
 	if (!Mesh)
 	{
 		return;
 	}
 
-	// Build transform from Godot coords
-	const FVector Location = SLCoord::PositionFromJson(Json);
-	const FQuat Rot = SLCoord::RotationFromJson(Json);
-	const FVector Scl = SLCoord::ScaleFromJson(Json);
-	const FTransform Transform(Rot, Location, Scl);
+	// Compute world transform
+	const FTransform Transform = ComputeWorldTransform(Json, ParentUuid);
 
-	// Spawn actor
+	// Store Godot-space world position/rotation so children can reference us
+	{
+		const FVector GodotPos = GodotPosFromJson(Json);
+		const FQuat GodotRot = GodotRotFromJson(Json);
+		FVector WorldPos = GodotPos;
+		FQuat WorldRot = GodotRot;
+		if (!ParentUuid.IsEmpty())
+		{
+			const FVector* PP = GodotPositions.Find(ParentUuid);
+			const FQuat* PR = GodotRotations.Find(ParentUuid);
+			if (PP && PR) { WorldPos = *PP + *PR * GodotPos; WorldRot = *PR * GodotRot; }
+		}
+		else
+		{
+			FString CacheId; Json->TryGetStringField(TEXT("cacheID"), CacheId);
+			const FVector* Off = CacheId.IsEmpty() ? nullptr : RegionOffsets.Find(CacheId);
+			if (Off) WorldPos = GodotPos + *Off;
+		}
+		GodotPositions.Add(Uuid, WorldPos);
+		GodotRotations.Add(Uuid, WorldRot);
+	}
+
 	AActor* Actor = SpawnObjectActor(Uuid, Mesh, Transform);
 	if (!Actor)
 	{
 		return;
 	}
 
-	// Handle parent attachment
-	FString ParentUuid;
-	if (Json->TryGetStringField(TEXT("parentUuid"), ParentUuid) && !ParentUuid.IsEmpty())
-	{
-		AttachToParent(Actor, Uuid, ParentUuid);
-	}
-
-	// Resolve any children that arrived before this parent
 	ResolvePendingChildren(Uuid);
 
 	SpawnedCount++;
-	if (SpawnedCount <= 10 || (SpawnedCount % 100 == 0))
+	if (SpawnedCount <= 20)
 	{
-		UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Spawned #%d: %s at (%.0f, %.0f, %.0f) mesh=%s cache=%d"),
-			SpawnedCount, *Uuid.Left(8), Location.X, Location.Y, Location.Z,
-			*MeshId.Left(8), GlbLoader->GetCacheSize());
+		const FVector& Loc = Transform.GetLocation();
+		const FVector GPos = GodotPositions.FindRef(Uuid);
+		const FVector& Scl = Transform.GetScale3D();
+		UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Spawned #%d: %s godot=(%.1f,%.1f,%.1f) unreal=(%.0f,%.0f,%.0f) scale=(%.2f,%.2f,%.2f) parent=%s mesh=%s"),
+			SpawnedCount, *Uuid.Left(8),
+			GPos.X, GPos.Y, GPos.Z,
+			Loc.X, Loc.Y, Loc.Z,
+			Scl.X, Scl.Y, Scl.Z,
+			ParentUuid.IsEmpty() ? TEXT("root") : *ParentUuid.Left(8),
+			*MeshId.Left(8));
 	}
 }
 
@@ -155,23 +305,19 @@ AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mes
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AActor* Actor = World->SpawnActor<AActor>(AActor::StaticClass(), Transform, SpawnParams);
+	AActor* Actor = World->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, SpawnParams);
 	if (!Actor)
 	{
 		return nullptr;
 	}
 
-	// Create root scene component
-	USceneComponent* Root = NewObject<USceneComponent>(Actor, TEXT("Root"));
-	Actor->SetRootComponent(Root);
-	Root->RegisterComponent();
-
-	// Add static mesh component
+	// Create mesh as root component and apply transform directly to it
 	UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(Actor, TEXT("Mesh"));
 	MeshComp->SetStaticMesh(Mesh);
 	MeshComp->SetMobility(EComponentMobility::Movable);
-	MeshComp->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
+	Actor->SetRootComponent(MeshComp);
 	MeshComp->RegisterComponent();
+	Actor->SetActorTransform(Transform);
 
 #if WITH_EDITOR
 	Actor->SetActorLabel(*Uuid.Left(8));
@@ -181,20 +327,7 @@ AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mes
 	return Actor;
 }
 
-void USLObjectManager::AttachToParent(AActor* Child, const FString& ChildUuid, const FString& ParentUuid)
-{
-	if (TObjectPtr<AActor>* ParentPtr = Objects.Find(ParentUuid))
-	{
-		// Parent exists — attach now
-		Child->AttachToActor(*ParentPtr, FAttachmentTransformRules::KeepWorldTransform);
-	}
-	else
-	{
-		// Parent hasn't arrived yet — defer
-		PendingChildren.FindOrAdd(ParentUuid).Add(ChildUuid);
-		ChildToParent.Add(ChildUuid, ParentUuid);
-	}
-}
+// ─── Deferred children ──────────────────────────────────
 
 void USLObjectManager::ResolvePendingChildren(const FString& ParentUuid)
 {
@@ -204,27 +337,26 @@ void USLObjectManager::ResolvePendingChildren(const FString& ParentUuid)
 		return;
 	}
 
-	TObjectPtr<AActor>* ParentPtr = Objects.Find(ParentUuid);
-	if (!ParentPtr)
-	{
-		return;
-	}
-
+	int32 Resolved = 0;
 	for (const FString& ChildUuid : ChildUuids)
 	{
-		ChildToParent.Remove(ChildUuid);
-		if (TObjectPtr<AActor>* ChildPtr = Objects.Find(ChildUuid))
+		TSharedPtr<FJsonObject> ChildJson;
+		if (PendingChildJson.RemoveAndCopyValue(ChildUuid, ChildJson))
 		{
-			(*ChildPtr)->AttachToActor(*ParentPtr, FAttachmentTransformRules::KeepWorldTransform);
+			// Re-process the child now that parent position is known
+			HandleObjectRender(ChildJson);
+			Resolved++;
 		}
 	}
 
-	if (ChildUuids.Num() > 0)
+	if (Resolved > 0)
 	{
 		UE_LOG(LogSLViewer, Verbose, TEXT("[ObjectManager] Resolved %d pending children for parent %s"),
-			ChildUuids.Num(), *ParentUuid.Left(8));
+			Resolved, *ParentUuid.Left(8));
 	}
 }
+
+// ─── Updates ────────────────────────────────────────────
 
 void USLObjectManager::HandleObjectUpdateBatch(const TSharedPtr<FJsonObject>& Json)
 {
@@ -255,13 +387,25 @@ void USLObjectManager::HandleObjectUpdateBatch(const TSharedPtr<FJsonObject>& Js
 			continue;
 		}
 
-		const FVector Location = SLCoord::PositionFromJson(Obj);
-		const FQuat Rot = SLCoord::RotationFromJson(Obj);
-		const FVector Scl = SLCoord::ScaleFromJson(Obj);
+		// Updates come as Godot-space positions — for root prims, add stored region offset
+		const FVector GodotPos = GodotPosFromJson(Obj);
+		const FQuat GodotRot = GodotRotFromJson(Obj);
 
-		(*ActorPtr)->SetActorTransform(FTransform(Rot, Location, Scl));
+		const FVector* StoredOffset = ObjectRegionOffset.Find(Uuid);
+		const FVector WorldGodotPos = StoredOffset ? GodotPos + *StoredOffset : GodotPos;
+
+		const FVector UnrealPos = SLCoord::Position(WorldGodotPos.X, WorldGodotPos.Y, WorldGodotPos.Z);
+		const FQuat UnrealRot = SLCoord::Rotation(GodotRot.X, GodotRot.Y, GodotRot.Z, GodotRot.W);
+
+		// Update stored Godot position for child computation
+		GodotPositions.Add(Uuid, WorldGodotPos);
+		GodotRotations.Add(Uuid, GodotRot);
+
+		(*ActorPtr)->SetActorLocationAndRotation(UnrealPos, UnrealRot);
 	}
 }
+
+// ─── Avatar camera ──────────────────────────────────────
 
 void USLObjectManager::HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json)
 {
@@ -270,13 +414,11 @@ void USLObjectManager::HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json)
 		return;
 	}
 
-	// avatar_update has id/position directly; avatar_update_batch has an avatars array
 	FString AvatarId;
-	FVector AvatarPos = FVector::ZeroVector;
+	FVector GodotPos = FVector::ZeroVector;
 
 	if (Json->HasField(TEXT("avatars")))
 	{
-		// Batch — find self in the array
 		const TArray<TSharedPtr<FJsonValue>>* Avatars;
 		if (Json->TryGetArrayField(TEXT("avatars"), Avatars))
 		{
@@ -288,7 +430,7 @@ void USLObjectManager::HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json)
 					FString Id;
 					if ((*AvatarObj)->TryGetStringField(TEXT("id"), Id) && Id == SelfAvatarId)
 					{
-						AvatarPos = SLCoord::PositionFromJson(*AvatarObj);
+						GodotPos = GodotPosFromJson(*AvatarObj);
 						AvatarId = Id;
 						break;
 					}
@@ -298,44 +440,43 @@ void USLObjectManager::HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json)
 	}
 	else
 	{
-		// Single update
 		Json->TryGetStringField(TEXT("id"), AvatarId);
 		if (AvatarId == SelfAvatarId)
 		{
-			AvatarPos = SLCoord::PositionFromJson(Json);
+			GodotPos = GodotPosFromJson(Json);
 		}
 	}
 
-	if (AvatarId != SelfAvatarId || AvatarPos.IsNearlyZero())
+	if (AvatarId != SelfAvatarId || GodotPos.IsNearlyZero())
 	{
 		return;
 	}
 
-	// Move the spectator pawn to the avatar's position, slightly above and behind
+	// Avatar position is region-local in Godot space — same coordinate system as root prims
+	const FVector UnrealPos = SLCoord::Position(GodotPos.X, GodotPos.Y, GodotPos.Z);
+
 	UWorld* World = GetGameInstance()->GetWorld();
-	if (!World)
-	{
-		return;
-	}
+	if (!World) return;
 
 	APawn* Pawn = UGameplayStatics::GetPlayerPawn(World, 0);
 	if (Pawn)
 	{
-		// Position camera 3m above avatar (300 cm)
-		const FVector CameraPos = AvatarPos + FVector(0, 0, 300.0f);
+		// 3m above avatar
+		const FVector CameraPos = UnrealPos + FVector(0, 0, 300.0f);
 		Pawn->SetActorLocation(CameraPos);
 		bCameraPositioned = true;
-		UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Camera positioned at avatar: (%.0f, %.0f, %.0f)"),
-			CameraPos.X, CameraPos.Y, CameraPos.Z);
+		UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Camera at avatar: godot=(%.1f, %.1f, %.1f) unreal=(%.0f, %.0f, %.0f)"),
+			GodotPos.X, GodotPos.Y, GodotPos.Z, CameraPos.X, CameraPos.Y, CameraPos.Z);
 	}
 }
+
+// ─── Kill / clear ───────────────────────────────────────
 
 void USLObjectManager::HandleObjectKill(const TSharedPtr<FJsonObject>& Json)
 {
 	const TArray<TSharedPtr<FJsonValue>>* UuidsArray;
 	if (!Json->TryGetArrayField(TEXT("uuids"), UuidsArray))
 	{
-		// Single kill
 		FString Uuid;
 		if (Json->TryGetStringField(TEXT("uuid"), Uuid))
 		{
@@ -353,19 +494,15 @@ void USLObjectManager::HandleObjectKill(const TSharedPtr<FJsonObject>& Json)
 void USLObjectManager::DestroyObject(const FString& Uuid)
 {
 	TObjectPtr<AActor> Actor;
-	if (!Objects.RemoveAndCopyValue(Uuid, Actor))
+	if (Objects.RemoveAndCopyValue(Uuid, Actor))
 	{
-		return;
+		if (Actor) Actor->Destroy();
 	}
-
-	if (Actor)
-	{
-		Actor->Destroy();
-	}
-
-	// Clean up any pending children references
+	GodotPositions.Remove(Uuid);
+	GodotRotations.Remove(Uuid);
+	ObjectRegionOffset.Remove(Uuid);
 	PendingChildren.Remove(Uuid);
-	ChildToParent.Remove(Uuid);
+	PendingChildJson.Remove(Uuid);
 }
 
 void USLObjectManager::HandleRegionChange()
@@ -378,12 +515,13 @@ void USLObjectManager::ClearAll()
 {
 	for (auto& [Uuid, Actor] : Objects)
 	{
-		if (Actor)
-		{
-			Actor->Destroy();
-		}
+		if (Actor) Actor->Destroy();
 	}
 	Objects.Empty();
 	PendingChildren.Empty();
-	ChildToParent.Empty();
+	PendingChildJson.Empty();
+	GodotPositions.Empty();
+	GodotRotations.Empty();
+	ObjectRegionOffset.Empty();
+	RegionOffsets.Empty();
 }

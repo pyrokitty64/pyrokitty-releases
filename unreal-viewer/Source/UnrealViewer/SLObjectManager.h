@@ -12,7 +12,11 @@ class USLGlbLoader;
  * Core object lifecycle manager — spawns, updates, and destroys actors
  * in response to WebSocket messages from Electron.
  *
- * Handles: object_render, object_update_batch, object_kill, region_change
+ * Coordinate handling (mirroring Godot's object_manager.gd):
+ *  - Positions arrive pre-converted to Godot space (axis-swapped from SL)
+ *  - Root prims: region-local position + region offset from terrain_ready messages
+ *  - Child prims: parent-relative offset — world pos = parent.pos + parent.rot * offset
+ *  - All converted Godot→Unreal via SLCoord before spawning
  */
 UCLASS()
 class UNREALVIEWER_API USLObjectManager : public UGameInstanceSubsystem
@@ -31,13 +35,14 @@ private:
 	void HandleObjectUpdateBatch(const TSharedPtr<FJsonObject>& Json);
 	void HandleObjectKill(const TSharedPtr<FJsonObject>& Json);
 	void HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json);
+	void HandleTerrainReady(const TSharedPtr<FJsonObject>& Json);
 	void HandleRegionChange();
+
+	/** Compute world-space Godot position/rotation for an object, then convert to Unreal. */
+	FTransform ComputeWorldTransform(const TSharedPtr<FJsonObject>& Json, const FString& ParentUuid);
 
 	/** Spawn an actor for an object with the given mesh and transform. */
 	AActor* SpawnObjectActor(const FString& Uuid, UStaticMesh* Mesh, const FTransform& Transform);
-
-	/** Attach a child actor to its parent. */
-	void AttachToParent(AActor* Child, const FString& ChildUuid, const FString& ParentUuid);
 
 	/** Resolve any children waiting for this parent to arrive. */
 	void ResolvePendingChildren(const FString& ParentUuid);
@@ -62,13 +67,25 @@ private:
 	/** Parent UUID -> child UUIDs waiting for parent to arrive */
 	TMap<FString, TArray<FString>> PendingChildren;
 
-	/** Child UUID -> parent UUID (for deferred attachment) */
-	TMap<FString, FString> ChildToParent;
+	/** Child UUID -> stored JSON (for deferred spawn when parent arrives) */
+	TMap<FString, TSharedPtr<FJsonObject>> PendingChildJson;
+
+	/** UUID -> stored Godot-space position (for computing child world positions) */
+	TMap<FString, FVector> GodotPositions;
+
+	/** UUID -> stored Godot-space rotation */
+	TMap<FString, FQuat> GodotRotations;
+
+	/** Region cacheID -> offset in Godot-space (X, -Z from SL) */
+	TMap<FString, FVector> RegionOffsets;
+
+	/** UUID -> region offset stored at creation */
+	TMap<FString, FVector> ObjectRegionOffset;
 
 	/** Delegate handle for message subscription */
 	FDelegateHandle MessageHandle;
 
-	/** Self avatar UUID — set from self_id message */
+	/** Self avatar UUID */
 	FString SelfAvatarId;
 
 	/** Whether we've moved the camera to the avatar yet */

@@ -26,6 +26,9 @@ UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPat
 	}
 
 	// Load GLB via glTFRuntime
+	// SceneScale=100 (default): converts GLB vertices from meters to centimeters.
+	// Our Position() also multiplies by 100, but that's for positions not mesh vertices.
+	// Scale is axis-swap only — glTFRuntime makes the mesh 1m at scale=1.
 	FglTFRuntimeConfig LoaderConfig;
 
 	UglTFRuntimeAsset* Asset = UglTFRuntimeFunctionLibrary::glTFLoadAssetFromFilename(
@@ -44,9 +47,8 @@ UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPat
 	// Keep the asset alive (UStaticMesh references data owned by it)
 	AssetCache.Add(MeshId, Asset);
 
-	// Load first mesh — skip embedded materials (we'll apply our own in Phase 3)
+	// Load first mesh — use embedded materials from the GLB for now
 	FglTFRuntimeStaticMeshConfig MeshConfig;
-	MeshConfig.MaterialsConfig.bSkipLoad = true;
 
 	const int32 NumMeshes = Asset->GetNumMeshes();
 	if (NumMeshes <= 0)

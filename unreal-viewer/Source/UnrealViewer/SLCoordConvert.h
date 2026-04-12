@@ -28,7 +28,11 @@ namespace SLCoord
 		return FQuat(-Gz, Gx, Gy, -Gw);
 	}
 
-	/** Convert Godot scale [X,Y,Z] to Unreal FVector (unitless, no 100x). */
+	/**
+	 * Convert Godot scale [X,Y,Z] to Unreal FVector.
+	 * Axis swap only — no 100x. glTFRuntime's SceneScale (default 100) already
+	 * converts GLB mesh vertices from meters to centimeters.
+	 */
 	FORCEINLINE FVector Scale(double Gx, double Gy, double Gz)
 	{
 		return FVector(Gz, Gx, Gy);

@@ -8,7 +8,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
-#include "Atmosphere/AtmosphericFog.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Engine/World.h"
 
 void USLSceneSetup::Initialize(FSubsystemCollectionBase& Collection)
@@ -50,29 +50,41 @@ void USLSceneSetup::SetupScene()
 		return;
 	}
 
-	// Directional light (sun)
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// Sky atmosphere — this is what makes the sky blue
 	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* SkyAtmo = World->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+		if (SkyAtmo)
+		{
+			USkyAtmosphereComponent* Atmo = NewObject<USkyAtmosphereComponent>(SkyAtmo, TEXT("SkyAtmosphere"));
+			SkyAtmo->SetRootComponent(Atmo);
+			Atmo->RegisterComponent();
+			UE_LOG(LogSLViewer, Log, TEXT("[SceneSetup] Spawned sky atmosphere"));
+		}
+	}
+
+	// Directional light (sun) — must be marked as atmosphere sun for the sky to work
+	{
 		ADirectionalLight* Sun = World->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-45.0f, -30.0f, 0.0f), Params);
 		if (Sun)
 		{
 			UDirectionalLightComponent* LightComp = Sun->GetComponent();
 			if (LightComp)
 			{
-				LightComp->SetIntensity(3.0f);
+				LightComp->SetIntensity(10.0f);
 				LightComp->SetLightColor(FLinearColor(1.0f, 0.95f, 0.85f));
 				LightComp->SetAtmosphereSunLight(true);
+				LightComp->SetAtmosphereSunLightIndex(0);
 				LightComp->SetCastShadows(true);
 			}
 			UE_LOG(LogSLViewer, Log, TEXT("[SceneSetup] Spawned directional light (sun)"));
 		}
 	}
 
-	// Sky light (ambient)
+	// Sky light (ambient fill from sky)
 	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		ASkyLight* Sky = World->SpawnActor<ASkyLight>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
 		if (Sky)
 		{
@@ -89,16 +101,15 @@ void USLSceneSetup::SetupScene()
 
 	// Exponential height fog
 	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		AExponentialHeightFog* Fog = World->SpawnActor<AExponentialHeightFog>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
 		if (Fog)
 		{
 			UExponentialHeightFogComponent* FogComp = Fog->GetComponent();
 			if (FogComp)
 			{
-				FogComp->SetFogDensity(0.002f);
-				FogComp->SetFogInscatteringColor(FLinearColor(0.5f, 0.6f, 0.8f));
+				FogComp->SetFogDensity(0.001f);
+				FogComp->SetFogInscatteringColor(FLinearColor(0.6f, 0.7f, 0.9f));
+				FogComp->SetVolumetricFog(true);
 			}
 			UE_LOG(LogSLViewer, Log, TEXT("[SceneSetup] Spawned exponential height fog"));
 		}
