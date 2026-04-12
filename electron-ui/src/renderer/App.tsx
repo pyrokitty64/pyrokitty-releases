@@ -16,7 +16,7 @@ type View = 'account' | 'add-account';
 export const App: React.FC = () => {
   const { grids } = useGrids();
   const { accounts, addAccount, updateAccount, removeAccount, getAccount } = useAccounts();
-  const { instances, launchViewer, launchFirestormForInstance, launchGodotViewerForInstance, stopViewer, getInstanceForAccount, isRunning } = useViewers();
+  const { instances, launchViewer, launchFirestormForInstance, launchGodotViewerForInstance, launchUnrealViewerForInstance, stopViewer, getInstanceForAccount, isRunning } = useViewers();
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<View>('account');
@@ -155,6 +155,7 @@ export const App: React.FC = () => {
                 onLoginAccount={(accountId) => launchViewer(accountId)}
                 onLaunchFirestorm={launchFirestormForInstance}
                 onLaunchGodotViewer={launchGodotViewerForInstance}
+                onLaunchUnrealViewer={launchUnrealViewerForInstance}
               />
             </div>
           </aside>

@@ -152,7 +152,6 @@ build-vc*/
 
 # animesh
 test-output/
-animesh.md
 download-rigged-*
 inspect-mesh-skin.ts
 test-rigged-glb.ts
@@ -166,3 +165,12 @@ Hippolyzer
 TODO*.md
 *.local
 .vite
+
+unreal-viewer/Intermediate/
+unreal-viewer/Saved/
+unreal-viewer/Binaries/
+unreal-viewer/DerivedDataCache/
+unreal-viewer/.vs/
+unreal-viewer/*.sln
+unreal-viewer/Plugins/glTFRuntime/Intermediate/
+unreal-viewer/Plugins/glTFRuntime/Binaries/

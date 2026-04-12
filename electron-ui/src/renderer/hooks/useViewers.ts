@@ -94,6 +94,10 @@ export function useViewers() {
     await ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_GODOT_VIEWER_FOR_INSTANCE, instanceId, vrMode);
   };
 
+  const launchUnrealViewerForInstance = async (instanceId: string): Promise<void> => {
+    await ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_UNREAL_VIEWER_FOR_INSTANCE, instanceId);
+  };
+
   const getInstanceForAccount = (accountId: string) =>
     instances.find((i) => i.accountId === accountId);
 
@@ -102,6 +106,7 @@ export function useViewers() {
     launchViewer,
     launchFirestormForInstance,
     launchGodotViewerForInstance,
+    launchUnrealViewerForInstance,
     stopViewer,
     getInstanceForAccount,
     isRunning: isInstanceRunning,

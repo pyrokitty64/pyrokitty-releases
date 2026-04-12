@@ -8,7 +8,9 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@abasb75/jpeg2000-decoder": "^2.5.4-d",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "sharp": "^0.34.5",
     "zod": "^3.25.0"
   },
   "devDependencies": {

@@ -17,7 +17,7 @@ var ws_port: int = 9200
 var _stats_update_timer: float = 0.0
 var _electron_stats: Dictionary = {}  # latest electron_stats from bridge
 
-# Low-priority message backlog — object_create / mesh_ready / texture_ready etc.
+# Low-priority message backlog — object_render / object_update_batch etc.
 # Avatar and identity messages bypass this queue and are always dispatched immediately.
 var _low_priority_queue: Array[String] = []
 var _vr_mode: bool = false

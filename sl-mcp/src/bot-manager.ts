@@ -35,6 +35,7 @@ import { ControlFlags } from '../../electron-ui/node-metaverse/dist/lib/enums/Co
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { log, logError } from './debug-log.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,6 +91,11 @@ export class BotManager {
   private loginPromise: Promise<string> | null = null;
   private _kickedMessage: string | null = null;
 
+  // AvatarAppearance caching for avatar export
+  private avatarVisualParams = new Map<string, number[]>();
+  private avatarBakedTextures = new Map<string, string[]>();
+  private avatarPlayingAnimations = new Map<string, string[]>();
+
   get state(): BotState {
     return this._state;
   }
@@ -102,6 +108,61 @@ export class BotManager {
     return this.bot;
   }
 
+  /** Get cached VisualParam bytes for an avatar (from AvatarAppearance). */
+  getVisualParams(avatarId: string): number[] | null {
+    return this.avatarVisualParams.get(avatarId) ?? null;
+  }
+
+  /** Get cached baked texture UUIDs for an avatar (11 channels). */
+  getBakedTextures(avatarId: string): string[] | null {
+    return this.avatarBakedTextures.get(avatarId) ?? null;
+  }
+
+  /** Get cached playing animation UUIDs for an avatar. */
+  getPlayingAnimations(avatarId: string): string[] | null {
+    return this.avatarPlayingAnimations.get(avatarId) ?? null;
+  }
+
+  // ============ Helpers ============
+
+  /**
+   * Await a promise with a timeout and periodic progress logging.
+   * Logs a tick every 5s so you can see exactly how long an opaque call blocks.
+   */
+  private timedAwait<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const start = Date.now();
+      let done = false;
+
+      const ticker = setInterval(() => {
+        if (done) return;
+        const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+        log('bot', `  ... still waiting for ${label} (${elapsed}s)`);
+      }, 5000);
+
+      const timeout = setTimeout(() => {
+        if (done) return;
+        done = true;
+        clearInterval(ticker);
+        reject(new Error(`${label} timed out (${(timeoutMs / 1000).toFixed(0)}s)`));
+      }, timeoutMs);
+
+      promise.then((val) => {
+        if (done) return;
+        done = true;
+        clearInterval(ticker);
+        clearTimeout(timeout);
+        resolve(val);
+      }).catch((err) => {
+        if (done) return;
+        done = true;
+        clearInterval(ticker);
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+  }
+
   // ============ Auto-login ============
 
   /**
@@ -110,13 +171,19 @@ export class BotManager {
    */
   private async loadDefaultCredentials(): Promise<{ firstName: string; lastName: string; password: string }> {
     const accountsPath = join(__dirname, '..', '..', 'electron-ui', 'data', 'accounts.json');
-    const data = JSON.parse(await readFile(accountsPath, 'utf-8'));
-    const account = data[0]; // BonnieBelle81
-    return {
-      firstName: account.firstName,
-      lastName: account.lastName,
-      password: account.password,
-    };
+    try {
+      const data = JSON.parse(await readFile(accountsPath, 'utf-8'));
+      const account = data[0]; // BonnieBelle81
+      log('bot', `Loaded credentials for ${account.firstName} ${account.lastName} from accounts.json`);
+      return {
+        firstName: account.firstName,
+        lastName: account.lastName,
+        password: account.password,
+      };
+    } catch (err) {
+      logError('bot', `Failed to load credentials from ${accountsPath}`, err);
+      throw err;
+    }
   }
 
   /**
@@ -127,13 +194,17 @@ export class BotManager {
     if (this.isConnected) return;
     // Clear kicked state — the caller is explicitly asking to reconnect
     if (this._kickedMessage) {
+      log('bot', `Clearing kicked state: "${this._kickedMessage}"`);
       this._kickedMessage = null;
     }
     if (this.loginPromise) {
+      log('bot', 'Login already in progress, waiting...');
       await this.loginPromise;
       return;
     }
+    log('bot', 'ensureConnected: loading default credentials...');
     const creds = await this.loadDefaultCredentials();
+    log('bot', `ensureConnected: auto-login as ${creds.firstName} ${creds.lastName}`);
     this.loginPromise = this.login(creds);
     try {
       await this.loginPromise;
@@ -196,46 +267,93 @@ export class BotManager {
     startLocation?: string;
   }): Promise<string> {
     if (this._state !== 'disconnected') {
+      log('bot', `login() rejected: state is ${this._state}`);
       throw new Error(`Cannot login: state is ${this._state}`);
     }
 
     this._kickedMessage = null;
     this._state = 'logging_in';
+    const loginUrl = params.loginUrl || 'https://login.agni.lindenlab.com/cgi-bin/login.cgi';
+    log('bot', `login() starting: ${params.firstName} ${params.lastName} → ${loginUrl} (start=${params.startLocation || 'last'})`);
 
     try {
       const loginParams = new LoginParameters();
       loginParams.firstName = params.firstName;
       loginParams.lastName = params.lastName;
       loginParams.password = params.password;
-      loginParams.url = params.loginUrl || 'https://login.agni.lindenlab.com/cgi-bin/login.cgi';
+      loginParams.url = loginUrl;
       loginParams.start = params.startLocation || 'last';
 
       this.bot = new Bot(loginParams, BotOptionFlags.None);
-      await this.bot.login();
+
+      // -- Step 1: XMLRPC login --
+      log('bot', '[1/6] XMLRPC login to grid...');
+      const loginStart = Date.now();
+      await this.timedAwait('XMLRPC login', this.bot.login(), 15000);
+      log('bot', `[1/6] XMLRPC login succeeded (${((Date.now() - loginStart) / 1000).toFixed(1)}s)`);
+
+      // Log what the grid gave us
+      try {
+        const r = this.bot.currentRegion;
+        const c = r.circuit;
+        log('bot', `  region="${r.regionName}" simIP=${c.ipAddress}:${c.port} agentID=${this.bot.agent.agentID}`);
+      } catch { /* region not yet available */ }
+
       // Set draw distance and camera BEFORE connectToSim so the sim streams nearby objects.
-      // The default cameraCenter is hardcoded to (199,203,24) which is wrong — use region center
-      // as initial guess, then update to actual avatar position after connecting.
       this.bot.agent.cameraFar = 1024;
       this.bot.agent.cameraCenter = new Vector3([128, 128, 30]);
       this.setupEventSubscriptions();
       this.populateFriendsFromLogin();
-      await this.bot.connectToSim();
-      // Request 360-degree interest list so sim sends all objects within draw distance
-      // (default mode only sends objects the camera is facing)
-      await this.bot.setInterestList('360').catch(() => { });
-      // Request 1.5 Mbps bandwidth (matching Firestorm default) so the sim streams objects faster
-      await this.bot.clientCommands.network.setBandwidth(1_500_000).catch(() => { });
 
-      // Wait for agent position then move camera so sim streams nearby objects
+      // Subscribe to events that fire during connectToSim for visibility
+      const connSubs: Array<{ unsubscribe(): void }> = [];
+      connSubs.push(this.bot.clientEvents.onEventQueueStateChange.subscribe((evt: any) => {
+        log('bot', `  [event] EventQueueStateChange: active=${evt.active}`);
+      }));
+      connSubs.push(this.bot.clientEvents.onCircuitLatency.subscribe((ms: number) => {
+        log('bot', `  [event] CircuitLatency: ${ms}ms`);
+      }));
+
+      // -- Step 2: UDP circuit + sim handshake + appearance --
+      log('bot', '[2/6] connectToSim (UDP handshake → appearance)...');
+      const connStart = Date.now();
+      await this.timedAwait('connectToSim', this.bot.connectToSim(), 15000);
+      log('bot', `[2/6] connectToSim succeeded (${((Date.now() - connStart) / 1000).toFixed(1)}s)`);
+
+      // Clean up progress subscriptions
+      for (const sub of connSubs) sub.unsubscribe();
+
+      // -- Step 3: Interest list --
+      log('bot', '[3/6] setInterestList(360)...');
+      await this.bot.setInterestList('360').catch((e: any) => {
+        log('bot', `  setInterestList failed (non-fatal): ${e.message || e}`);
+      });
+      log('bot', '[3/6] setInterestList done');
+
+      // -- Step 4: Bandwidth --
+      log('bot', '[4/6] setBandwidth(1.5Mbps)...');
+      await this.bot.clientCommands.network.setBandwidth(1_500_000).catch((e: any) => {
+        log('bot', `  setBandwidth failed (non-fatal): ${e.message || e}`);
+      });
+      log('bot', '[4/6] setBandwidth done');
+
+      // -- Step 5: Wait for agent position --
+      log('bot', '[5/6] Waiting for agent position (up to 10s)...');
+      const posStart = Date.now();
       await this.waitForAgentPosition(10000);
+      log('bot', `[5/6] Agent position ready (${((Date.now() - posStart) / 1000).toFixed(1)}s)`);
+
+      // -- Step 6: Camera sync --
+      log('bot', '[6/6] Starting camera sync...');
       this.updateCamera();
-      // Keep camera synced to avatar position (sim uses camera for interest list)
       this.cameraInterval = setInterval(() => this.updateCamera(), 5000);
 
       this._state = 'connected';
       const region = this.bot.currentRegion?.regionName || 'unknown';
+      log('bot', `Login complete: ${params.firstName} ${params.lastName} in ${region} (total ${((Date.now() - loginStart) / 1000).toFixed(1)}s)`);
       return `Logged in as ${params.firstName} ${params.lastName} in ${region}`;
     } catch (err: any) {
+      logError('bot', 'Login failed', err);
       this._state = 'disconnected';
       this.bot = null;
       throw err;
@@ -243,6 +361,7 @@ export class BotManager {
   }
 
   async logout(): Promise<void> {
+    log('bot', 'Logout requested');
     if (this.cameraInterval) {
       clearInterval(this.cameraInterval);
       this.cameraInterval = null;
@@ -257,6 +376,7 @@ export class BotManager {
     this.recentIMs = [];
     this.recentChat = [];
     this._state = 'disconnected';
+    log('bot', 'Logout complete');
   }
 
   getStatus(): Record<string, unknown> {
@@ -308,6 +428,7 @@ export class BotManager {
   async teleport(regionName: string, x = 128, y = 128, z = 30): Promise<string> {
     await this.ensureConnected();
     const agentId = this.bot!.agentID().toString();
+    log('bot', `Teleport request: "${regionName}" (${x}, ${y}, ${z})`);
     console.log(`[Teleport] Agent ${agentId} requesting teleport to "${regionName}" (${x}, ${y}, ${z})`);
     const position = new Vector3([x, y, z]);
     const lookAt = new Vector3([0, 1, 0]);
@@ -1283,6 +1404,7 @@ export class BotManager {
 
     // Handle disconnect (e.g. kicked by another client logging in)
     this.bot.clientEvents.onDisconnected.subscribe((event) => {
+      log('bot', `Disconnected: ${event.message} (requested=${event.requested})`);
       console.error(`[BotManager] Disconnected: ${event.message} (requested=${event.requested})`);
       if (this.cameraInterval) {
         clearInterval(this.cameraInterval);
@@ -1312,6 +1434,56 @@ export class BotManager {
       if (this.recentIMs.length > this.maxRecentIMs) {
         this.recentIMs.shift();
       }
+    });
+
+    // Cache AvatarAppearance data (VisualParam bytes + baked textures) for avatar export
+    this.bot.subscribeToCircuitMessages([4294901918 /* Message.AvatarAppearance */], async (packet: any) => {
+      try {
+        const msg = packet.message;
+        const avatarId = msg.Sender?.ID?.toString();
+        if (!avatarId) return;
+
+        // Cache VisualParam bytes
+        if (msg.VisualParam && msg.VisualParam.length > 0) {
+          const bytes = msg.VisualParam.map((vp: { ParamValue: number }) => vp.ParamValue);
+          this.avatarVisualParams.set(avatarId, bytes);
+        }
+
+        // Cache baked texture UUIDs from TextureEntry
+        if (msg.ObjectData?.TextureEntry) {
+          try {
+            const { TextureEntry } = await import('../../electron-ui/node-metaverse/dist/lib/classes/TextureEntry.js');
+            const te = TextureEntry.from(msg.ObjectData.TextureEntry);
+            // Bake channel face indices: HEAD=8, UPPER=9, LOWER=10, EYES=11, SKIRT=20, HAIR=21, LEFTARM=40..AUX3=44
+            const BAKE_FACES = [8, 9, 10, 11, 20, 21, 40, 41, 42, 43, 44];
+            const bakes: string[] = [];
+            for (let ch = 0; ch < 11; ch++) {
+              const teFace = BAKE_FACES[ch];
+              if (te.explicitTextureFaces.has(teFace)) {
+                bakes.push(te.faces[teFace]?.textureID?.toString() || '');
+              } else if (ch < 6) {
+                bakes.push(te.defaultTexture?.textureID?.toString() || '');
+              } else {
+                bakes.push('');
+              }
+            }
+            this.avatarBakedTextures.set(avatarId, bakes);
+          } catch { /* TextureEntry parse failure */ }
+        }
+      } catch (err) {
+        console.warn('[BotManager] Error caching AvatarAppearance:', (err as Error).message);
+      }
+    });
+
+    // Cache playing animations for all avatars (AvatarAnimation message)
+    this.bot.subscribeToCircuitMessages([20 /* Message.AvatarAnimation */], (packet: any) => {
+      try {
+        const msg = packet.message;
+        const avatarId = msg.Sender?.ID?.toString();
+        if (!avatarId || !msg.AnimationList) return;
+        const anims: string[] = msg.AnimationList.map((a: { AnimID: { toString(): string } }) => a.AnimID.toString());
+        this.avatarPlayingAnimations.set(avatarId, anims);
+      } catch { /* ignore */ }
     });
   }
 

@@ -178,7 +178,7 @@ Electron batches sends in a 16ms coalescer. Godot side has a 16MB inbound buffer
 
 Single entry point for object creation + mesh/face application. Steps:
 
-### 5a. RSInstance creation (via `handle_object_create`)
+### 5a. RSInstance creation (inside `handle_object_render`)
 
 Creates an RSInstance (RenderingServer RID wrapper). No placeholder box for `object_render` messages (mesh/shape data is present). Stores in:
 

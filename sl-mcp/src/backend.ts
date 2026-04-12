@@ -6,6 +6,7 @@
 import { BotManager } from './bot-manager.js';
 import { allTools, type ToolDef } from './tools/index.js';
 import type { WrapperMessage, BackendMessage } from './ipc-types.js';
+import { log, logError } from './debug-log.js';
 
 const botManager = new BotManager();
 
@@ -50,6 +51,7 @@ process.on('message', async (msg: WrapperMessage) => {
         isError: result.isError,
       });
     } catch (err: any) {
+      logError('backend', `Tool ${msg.tool} threw`, err);
       send({
         type: 'result',
         reqId: msg.reqId,
@@ -62,4 +64,5 @@ process.on('message', async (msg: WrapperMessage) => {
 
 // Signal ready
 send({ type: 'ready' });
+log('backend', `Ready with ${allTools.length} tools`);
 console.error('[backend] Ready');
