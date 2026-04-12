@@ -10,7 +10,7 @@ interface WindowBounds {
   isMaximized?: boolean;
 }
 
-export type WindowKey = 'main' | 'map' | 'map3d' | 'godot';
+export type WindowKey = 'main' | 'map' | 'map3d' | 'godot' | 'unreal';
 
 type WindowStateFile = Partial<Record<WindowKey, WindowBounds>>;
 

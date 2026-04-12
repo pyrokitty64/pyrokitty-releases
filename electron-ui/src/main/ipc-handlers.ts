@@ -73,6 +73,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return viewerManager.launchGodotViewerForInstance(instanceId, vrMode);
   });
 
+  ipcMain.handle(IPC_CHANNELS.LAUNCH_UNREAL_VIEWER_FOR_INSTANCE, async (_, instanceId: string) => {
+    return viewerManager.launchUnrealViewerForInstance(instanceId);
+  });
+
   // MFA handlers
   ipcMain.handle(IPC_CHANNELS.MFA_SUBMIT, async (_, instanceId: string, token: string, remember: boolean) => {
     return viewerManager.submitMfaToken(instanceId, token, remember);

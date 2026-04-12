@@ -135,6 +135,7 @@ export interface ViewerInstance {
   connectionState: ConnectionState;
   regionName?: string; // Set when fully arrived in a region
   godotBridgeActive?: boolean; // True when Godot sidecar is running
+  unrealBridgeActive?: boolean; // True when Unreal sidecar is running
   statusMessage?: string; // User-facing message (e.g. crash reason)
 }
 
@@ -167,6 +168,7 @@ export const IPC_CHANNELS = {
   LAUNCH_VIEWER: 'viewer:launch',
   LAUNCH_FIRESTORM_FOR_INSTANCE: 'viewer:launch-firestorm-for-instance',
   LAUNCH_GODOT_VIEWER_FOR_INSTANCE: 'viewer:launch-godot-for-instance',
+  LAUNCH_UNREAL_VIEWER_FOR_INSTANCE: 'viewer:launch-unreal-for-instance',
   STOP_VIEWER: 'viewer:stop',
   GET_INSTANCES: 'viewer:instances',
   VIEWER_STATUS_UPDATE: 'viewer:status-update',

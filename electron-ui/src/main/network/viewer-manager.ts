@@ -9,6 +9,7 @@ import { connectionManager, ViewerConnection } from './viewer-connection';
 import { metaverseConnectionManager, MetaverseConnection } from './metaverse-connection';
 import { voiceRegistry } from '../voice/voice-registry';
 import { GodotBridge } from '../bridge/godot-bridge';
+import { UnrealBridge } from '../bridge/unreal-bridge';
 
 function getViewerPath(): string {
   if (app.isPackaged) {
@@ -33,6 +34,7 @@ export class ViewerManager extends EventEmitter {
   private sessionPasswords: Map<string, string> = new Map();
   // Godot bridge instances
   private godotBridges: Map<string, GodotBridge> = new Map();
+  private unrealBridges: Map<string, UnrealBridge> = new Map();
 
   getInstances(): ViewerInstance[] {
     return Array.from(this.instances.values());
@@ -208,6 +210,16 @@ export class ViewerManager extends EventEmitter {
       this.emit('status-update', instance);
     }
 
+    // Stop Unreal viewer if running (can't run both simultaneously)
+    const unrealBridge = this.unrealBridges.get(instanceId);
+    if (unrealBridge?.isActive) {
+      console.log(`[ViewerManager] Stopping Unreal viewer before launching Firestorm`);
+      unrealBridge.stop();
+      this.unrealBridges.delete(instanceId);
+      instance.unrealBridgeActive = false;
+      this.emit('status-update', instance);
+    }
+
     console.log(`[ViewerManager] Launching viewer for ${account.firstName} ${account.lastName}`);
 
     // Launch viewer with standard CLI login - this will auto-disconnect node-metaverse
@@ -301,6 +313,94 @@ export class ViewerManager extends EventEmitter {
     await bridge.start();
 
     instance.godotBridgeActive = true;
+    this.emit('status-update', instance);
+  }
+
+  /**
+   * Launch the Unreal Engine 5 viewer sidecar for an existing metaverse session.
+   * Mirrors the Godot launch flow but spawns UE5 instead.
+   */
+  async launchUnrealViewerForInstance(instanceId: string): Promise<void> {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      throw new Error('Instance not found');
+    }
+
+    if (instance.connectionState !== 'metaverse_connected') {
+      const viewerProcess = this.processes.get(instanceId);
+      if (viewerProcess) {
+        console.log(`[ViewerManager] Stopping Firestorm before launching Unreal`);
+        await this.stopViewerAndWaitForReconnect(instanceId);
+      } else {
+        throw new Error(`Cannot launch Unreal: instance is ${instance.connectionState}, expected metaverse_connected`);
+      }
+    }
+
+    // Check if already running — toggle off
+    const existing = this.unrealBridges.get(instanceId);
+    if (existing?.isActive) {
+      existing.stop();
+      this.unrealBridges.delete(instanceId);
+      instance.unrealBridgeActive = false;
+      this.emit('status-update', instance);
+      return;
+    }
+
+    // Stop Godot if running (can't run both simultaneously)
+    const godotBridge = this.godotBridges.get(instanceId);
+    if (godotBridge?.isActive) {
+      console.log(`[ViewerManager] Stopping Godot viewer before launching Unreal`);
+      godotBridge.stop();
+      this.godotBridges.delete(instanceId);
+      instance.godotBridgeActive = false;
+    }
+
+    const metaverse = metaverseConnectionManager.get(instanceId);
+    if (!metaverse) {
+      throw new Error('Metaverse connection not found');
+    }
+
+    const bot = metaverse.getBot();
+    if (!bot) {
+      throw new Error('Bot not available');
+    }
+
+    const sceneManager = metaverse.getSceneManager();
+    if (!sceneManager) {
+      throw new Error('SceneManager not available');
+    }
+
+    console.log(`[ViewerManager] Launching Unreal viewer for ${instanceId}`);
+
+    const bridge = new UnrealBridge(bot, sceneManager, {
+      objectAnimationBuffer: metaverse.getObjectAnimationBuffer(),
+      avatarAnimationBuffer: metaverse.getAvatarAnimationBuffer(),
+      avatarAppearanceBuffer: metaverse.getAvatarAppearanceBuffer(),
+      visualParamBuffer: metaverse.getVisualParamBuffer(),
+    });
+    this.unrealBridges.set(instanceId, bridge);
+
+    bridge.on('crash', (message: string) => {
+      const inst = this.instances.get(instanceId);
+      if (inst) {
+        inst.statusMessage = message;
+        this.emit('status-update', inst);
+      }
+    });
+
+    bridge.on('exit', () => {
+      console.log(`[ViewerManager] Unreal bridge exited for ${instanceId}`);
+      this.unrealBridges.delete(instanceId);
+      const inst = this.instances.get(instanceId);
+      if (inst) {
+        inst.unrealBridgeActive = false;
+        this.emit('status-update', inst);
+      }
+    });
+
+    await bridge.start();
+
+    instance.unrealBridgeActive = true;
     this.emit('status-update', instance);
   }
 
@@ -750,6 +850,13 @@ export class ViewerManager extends EventEmitter {
       this.godotBridges.delete(instanceId);
     }
 
+    // Stop Unreal bridge if running
+    const unrealBridge = this.unrealBridges.get(instanceId);
+    if (unrealBridge) {
+      unrealBridge.stop();
+      this.unrealBridges.delete(instanceId);
+    }
+
     // Disconnect voice
     voiceRegistry.remove(instanceId);
 
@@ -809,6 +916,12 @@ export class ViewerManager extends EventEmitter {
       bridge.stop();
     }
     this.godotBridges.clear();
+
+    // Stop all Unreal bridges
+    for (const [, bridge] of this.unrealBridges) {
+      bridge.stop();
+    }
+    this.unrealBridges.clear();
 
     // Stop all voice sidecars
     voiceRegistry.stopAll();
