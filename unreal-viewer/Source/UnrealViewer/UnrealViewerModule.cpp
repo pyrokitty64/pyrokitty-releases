@@ -1,5 +1,7 @@
 #include "UnrealViewerModule.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/ConstructorHelpers.h"
+#include "SLMaterialRefs.h"
 
 DEFINE_LOG_CATEGORY(LogSLViewer);
 

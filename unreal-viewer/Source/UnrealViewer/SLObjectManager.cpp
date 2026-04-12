@@ -63,6 +63,16 @@ void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
+	// Pre-load glTFRuntime base materials (must be loaded early so the cooker
+	// sees the references and includes them in packaged builds)
+	MatOpaque = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
+	MatMasked = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeMasked_Inst"));
+	MatTranslucent = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
+	UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Materials: opaque=%s masked=%s translucent=%s"),
+		MatOpaque ? TEXT("OK") : TEXT("MISSING"),
+		MatMasked ? TEXT("OK") : TEXT("MISSING"),
+		MatTranslucent ? TEXT("OK") : TEXT("MISSING"));
+
 	MessageHandle = WebSocket->OnJsonMessage.AddLambda(
 		[this](const FString& Type, const TSharedPtr<FJsonObject>& Json)
 		{
@@ -374,13 +384,6 @@ AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mes
 			Face->TryGetNumberField(TEXT("alphaMode"), AlphaMode);
 			// resolvedAlphaMode overrides if present (Electron computes this)
 			Face->TryGetNumberField(TEXT("resolvedAlphaMode"), AlphaMode);
-
-			static UMaterialInterface* MatOpaque = LoadObject<UMaterialInterface>(nullptr,
-				TEXT("/glTFRuntime/M_glTFRuntimeBase"));
-			static UMaterialInterface* MatMasked = LoadObject<UMaterialInterface>(nullptr,
-				TEXT("/glTFRuntime/M_glTFRuntimeMasked_Inst"));
-			static UMaterialInterface* MatTranslucent = LoadObject<UMaterialInterface>(nullptr,
-				TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
 
 			UMaterialInterface* BaseMat = MatOpaque;
 			if (static_cast<int32>(AlphaMode) == 1 && MatMasked)

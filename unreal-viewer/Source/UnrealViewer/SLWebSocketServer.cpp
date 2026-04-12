@@ -102,8 +102,11 @@ void USLWebSocketServer::OnDataReceived(void* Data, int32 DataSize)
 {
 	if (DataSize <= 0) return;
 
-	// Convert raw UTF-8 bytes to FString
-	const FString JsonStr = FString(DataSize, UTF8_TO_TCHAR(static_cast<const ANSICHAR*>(Data)));
+	// Convert raw UTF-8 bytes to FString — must use explicit converter to
+	// ensure the temporary outlives FString construction (UTF8_TO_TCHAR is
+	// a stack macro that can dangle with large buffers).
+	const FUTF8ToTCHAR Converter(static_cast<const ANSICHAR*>(Data), DataSize);
+	const FString JsonStr(Converter.Length(), Converter.Get());
 
 	// Parse JSON
 	TSharedPtr<FJsonObject> JsonObj;

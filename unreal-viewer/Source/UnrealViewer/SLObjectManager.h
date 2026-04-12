@@ -86,6 +86,14 @@ private:
 	/** UUID -> region offset stored at creation */
 	TMap<FString, FVector> ObjectRegionOffset;
 
+	/** Base materials for face texturing (loaded once during Initialize) */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MatOpaque;
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MatMasked;
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MatTranslucent;
+
 	/** Delegate handle for message subscription */
 	FDelegateHandle MessageHandle;
 

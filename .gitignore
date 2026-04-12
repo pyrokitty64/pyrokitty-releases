@@ -175,3 +175,4 @@ unreal-viewer/*.sln
 unreal-viewer/Plugins/glTFRuntime/Intermediate/
 unreal-viewer/Plugins/glTFRuntime/Binaries/
 unreal-viewer/Build/
+electron-ui/unreal-viewer-staging/
