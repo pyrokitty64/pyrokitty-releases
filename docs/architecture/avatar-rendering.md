@@ -90,7 +90,7 @@ SL Server → AvatarAppearance msg (253 VisualParam U8 bytes)
   → metaverse-connection.ts: buffers bytes during login
   → avatar-shape.ts: computeShapeDeltas() via fast-xml-parser
   → WebSocket → Godot: { type: "avatar_shape", avatarId, bones }
-  → object_manager.gd: _apply_shape_to_skeleton() + _reapply_joint_overrides()
+  → avatar_manager.gd: _apply_shape_to_skeleton() + _reapply_joint_overrides()
 ```
 
 ### Dequantization

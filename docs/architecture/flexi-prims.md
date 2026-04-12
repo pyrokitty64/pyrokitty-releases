@@ -7,7 +7,7 @@ Flexi (flexible) prims are SL objects whose shape deforms under simulated physic
 ```
 TypeScript (godot-object-sender.ts)          Godot (flexi_prim_manager.gd)
  ┌─────────────────────────┐                  ┌──────────────────────────┐
- │ getFlexiInfo() extracts │  object_create   │ create_flexi()           │
+ │ getFlexiInfo() extracts │  object_render   │ create_flexi()           │
  │ FlexibleData from       │ ──────────────>  │  ├─ Node3D root (pos+rot)│
  │ ExtraParams, sends:     │  { flexible:     │  ├─ Skeleton3D (9 bones) │
  │  tension, drag, gravity │    {tension,..}} │  ├─ rigged MeshInstance3D│

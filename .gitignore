@@ -152,7 +152,6 @@ build-vc*/
 
 # animesh
 test-output/
-animesh.md
 download-rigged-*
 inspect-mesh-skin.ts
 test-rigged-glb.ts

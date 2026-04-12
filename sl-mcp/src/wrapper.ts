@@ -17,6 +17,7 @@ import { fork, type ChildProcess } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { WrapperMessage, BackendMessage, ToolDefinition } from './ipc-types.js';
+import { log, logError, logSessionStart, logClear } from './debug-log.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,6 +41,7 @@ function sendToChild(msg: WrapperMessage): void {
 }
 
 function spawnBackend(): Promise<ToolDefinition[]> {
+  log('wrapper', 'Spawning backend process...');
   return new Promise((resolve, reject) => {
     if (child) {
       child.removeAllListeners();
@@ -80,11 +82,13 @@ function spawnBackend(): Promise<ToolDefinition[]> {
     });
 
     child.on('error', (err) => {
+      logError('wrapper', 'Backend process error', err);
       console.error(`[wrapper] Backend process error: ${err.message}`);
       if (!resolved) reject(err);
     });
 
     child.on('exit', (code) => {
+      log('wrapper', `Backend exited with code ${code}`);
       console.error(`[wrapper] Backend exited with code ${code}`);
       child = null;
       for (const [reqId, pending] of pendingCalls) {
@@ -105,13 +109,27 @@ function spawnBackend(): Promise<ToolDefinition[]> {
 
 function callBackendTool(toolName: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const reqId = `req_${++reqCounter}`;
+  const startTime = Date.now();
+  // Redact password from logged args
+  const safeArgs = { ...args };
+  if ('password' in safeArgs) safeArgs.password = '***';
+  log('wrapper', `→ ${toolName}(${JSON.stringify(safeArgs)}) [${reqId}]`);
+
   return new Promise((resolve) => {
-    pendingCalls.set(reqId, { resolve });
+    pendingCalls.set(reqId, {
+      resolve: (result) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+        const preview = result.content?.[0]?.text?.slice(0, 200) || '';
+        log('wrapper', `← ${toolName} [${reqId}] ${result.isError ? 'ERROR' : 'OK'} (${elapsed}s) ${preview}`);
+        resolve(result);
+      },
+    });
     sendToChild({ type: 'call', reqId, tool: toolName, args });
 
     setTimeout(() => {
       if (pendingCalls.has(reqId)) {
         pendingCalls.delete(reqId);
+        log('wrapper', `← ${toolName} [${reqId}] TIMEOUT (120s)`);
         resolve({
           content: [{ type: 'text', text: 'Tool call timed out (120s)' }],
           isError: true,
@@ -153,6 +171,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'reload') {
     try {
+      // Log out the bot gracefully before killing the backend
+      if (child?.connected) {
+        log('wrapper', 'Reload: logging out bot before respawn...');
+        await callBackendTool('sl_logout', {}).catch(() => {});
+      }
+      logClear();
+      logSessionStart();
       const tools = await spawnBackend();
       server.sendToolListChanged();
       return {
@@ -172,19 +197,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
+  logSessionStart();
   try {
     const tools = await spawnBackend();
+    log('wrapper', `Backend ready with ${tools.length} tools: ${tools.map(t => t.name).join(', ')}`);
     console.error(`[wrapper] Backend ready with ${tools.length} tools`);
   } catch (err: any) {
+    logError('wrapper', 'Initial backend spawn failed', err);
     console.error(`[wrapper] Initial backend spawn failed: ${err.message}`);
   }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  log('wrapper', 'MCP server running on stdio');
   console.error('[wrapper] MCP server running on stdio');
 }
 
 main().catch((err) => {
+  logError('wrapper', 'Fatal', err);
   console.error(`[wrapper] Fatal: ${err.message}`);
   process.exit(1);
 });

@@ -77,7 +77,7 @@ electron-ui/
 
 **Godot Bridge** (`src/main/bridge/`): Manages the WebSocket connection to Godot, batches outbound messages (200 max per 50ms flush with per-UUID coalescing), and routes inbound input/interaction events back to the protocol layer. Key files:
 - `godot-bridge.ts` — spawns Godot, manages connection lifecycle, send buffer coalescing (deduplicates per-UUID object/avatar/animation/face updates before serialization)
-- `godot-object-sender.ts` — two-phase object creation (placeholder then full mesh)
+- `godot-object-sender.ts` — single `object_render` message formatting (all assets gated by readiness tracker)
 - `godot-update-coalescer.ts` — batches position/rotation updates at 16ms intervals
 - `godot-avatar-manager.ts` — avatar lifecycle, shape morphs, Baked-on-Mesh textures
 - `godot-animation-manager.ts` — animation list changes for avatars and animesh (in-flight guard prevents duplicate batch sends)
@@ -127,7 +127,7 @@ Godot runs a TCP server (default port 9200) and accepts a single WebSocket clien
 
 **High-priority messages** (processed immediately every frame): avatar lifecycle, self ID, object position updates with physics, sitting state, stats. These ensure the player's view stays responsive.
 
-**Low-priority messages** (time-budgeted queue): `object_create`, `object_complete`, `mesh_ready`, `texture_ready`. Processed within a 12ms frame budget to maintain framerate.
+**Low-priority messages** (time-budgeted queue): `object_render`, `object_update_batch`, etc. Processed within a 12ms frame budget to maintain framerate.
 
 **Per-subsystem timing**: `scene_manager.gd` tracks ms/frame for terrain, interpolation, animation, flexi, name bubbles, and finalization. Reported in the stats line as `CPU: Xms [terrain=... interp=... anim=... ...]`.
 
@@ -164,11 +164,8 @@ Conversion: `position [x, y, z] -> [x, z, -y]`, `quaternion [x, y, z, w] -> [x, 
 - `object_kill` — remove object from scene
 - `object_properties` — object name, description, flags, clickAction, ownerID
 
-**Legacy Object Messages (still in Godot, unused by current pipeline):**
-- `object_create` — was phase 1: lightweight placeholder
-- `object_complete` — was phase 2: full mesh + faces
-- `mesh_ready` — was asset notification for GLB files
-- `texture_ready` — was asset notification for textures
+**Legacy Object Messages (removed from Godot):**
+- `object_create`, `object_complete`, `mesh_ready`, `texture_ready` — replaced by single `object_render` message. Handlers removed from Godot.
 
 **Avatar Lifecycle:**
 - `avatar_create` — new avatar: id, localId, name, position, rotation (high priority)
@@ -240,7 +237,7 @@ Assets flow through parallel fetch queues in the Electron process. Each queue de
 ```
 SL CDN
   │
-  ├─ TextureFetchQueue ─→ J2K decode (WASM OpenJPEG, 8 workers) ─→ GPU compress (BC1/BC3) ─→ .bctex
+  ├─ TextureFetchQueue ─→ J2K decode (WASM OpenJPEG, 2-12 auto-scaling workers) ─→ GPU compress (BC1/BC3) ─→ .bctex
   ├─ MeshFetchQueue ────→ LLMesh parse ─→ GLB export (mesh-converter.ts) ──────────────────→ .glb
   ├─ SculptFetchQueue ──→ sculpt texture decode ─→ sculpt mesh generation ─────────────────→ .glb
   ├─ AnimationFetchQueue → LLAnimation binary ─→ JSON parse ─→ disk cache ─────────────────→ .json
@@ -253,7 +250,7 @@ SL CDN
 
 **Mesh pipeline detail**: LLMesh binary -> parse LoD levels, morphs, materials -> rebuild skeleton from `avatar_skeleton.xml` -> compute inverse bind matrices -> bake bone shape scales -> export as GLTF 2.0 `.glb`. See [animesh.md](architecture/animesh.md).
 
-**Object readiness**: `ObjectReadinessTracker` gates `object_complete` messages until all referenced meshes and textures are cached on disk, preventing Godot from trying to load missing files.
+**Object readiness**: `ObjectReadinessTracker` gates `object_render` messages until all referenced meshes and textures are cached on disk, preventing Godot from trying to load missing files.
 
 **Distance gating**: Root prims beyond `TEXTURE_FETCH_RANGE` (camera draw distance) are deferred in `sendObject()` — no textures, meshes, or materials are resolved. Children of deferred roots are also deferred. When the camera moves closer, `sweepDeferredTextures()` promotes roots and their children back into the pipeline. The distance check must run before `resolveObject()` since material resolution triggers texture downloads as a side effect.
 
@@ -413,8 +410,7 @@ godot-viewer/
     main.gd              ← WebSocket TCP server (1MB buffer), message dispatch, VR init, frame budget
     scene_manager.gd     ← RSInstance-based object CRUD, flat linkset hierarchy, terrain/water/sky,
                            occlusion culling loop, distance culling
-    object_manager.gd    ← Avatar/animesh lifecycle, shared skeleton management, shape deformation,
-                           joint overrides, animation evaluation, bone attachment positioning
+    object_manager.gd    ← Object creation, mesh instantiation, skin remapping, joint overrides
     animation_manager.gd ← Animation evaluation, per-channel priority, built-in motions (head_rot)
     asset_pipeline.gd    ← Texture/mesh loading threads, frame-budgeted finalization, material cache
     interpolation_manager.gd ← Avatar/object lerp+slerp, physics extrapolation, blend correction
@@ -461,7 +457,7 @@ electron-ui/src/main/
 
   assets/                ← Asset fetch, decode, and cache
     animation-fetch-queue.ts ← Animation asset download queue
-    decode-pool.ts       ← Worker thread pool (8 workers) for parallel J2K decode
+    decode-pool.ts       ← Auto-scaling worker thread pool (2-12 workers) for parallel J2K decode
     gpu-compress-queue.ts ← Queues RGBA textures for GPU compression, writes .bctex
     gpu-compress-window.ts ← Hidden BrowserWindow hosting WebGPU compute shader for BC1/BC3
     j2k-converter.ts     ← J2K decode orchestration (native vs WASM)

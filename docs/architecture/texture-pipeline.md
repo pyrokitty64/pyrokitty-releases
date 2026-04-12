@@ -3,8 +3,8 @@
 ## Current Pipeline
 
 ```
-SL CDN (J2C download, 8 concurrent)
-  → WASM OpenJPEG decode (4 worker threads)
+SL CDN (J2C download, 32 concurrent)
+  → WASM OpenJPEG decode (2-12 auto-scaling worker threads)
   → CPU alpha detect (~1000 pixel sample)
   → RGBA buffer + format sent via IPC to hidden BrowserWindow
   → GPU single-pass: downsample mip chain + BC1/BC3 compress (WebGPU compute, 1 submit)
@@ -53,15 +53,15 @@ Fresh cache fill on a region with ~10,000 textures + ~5,600 meshes:
 ### 4. Memory Leak Fixes
 - **setTimeout closure leak**: `gpuCompressFull()` had a 60-second timeout whose closure shared scope with the `rgba` Buffer parameter. Every RGBA buffer was pinned for 60 seconds after processing. Fix: IPC send moved outside the Promise constructor so `rgba` is never captured; `clearTimeout` on response.
 - **Unnecessary Buffer.from copy**: `decode-pool.ts` was doing `Buffer.from(msg.rgbaPixels!)` on an already-transferred Buffer, doubling memory per texture. Removed.
-- **Decode pool size**: Reduced from 16 to 4 workers. Each WASM worker has Emscripten linear memory that only grows. 16 workers was ~4GB+ of WASM memory alone.
-- **Download concurrency**: Reduced from 16 to 8. Without sharp as a CPU throttle, 16 was too aggressive.
+- **Decode pool auto-scaling**: Pool starts at 2 workers, scales up to 4-12 (based on system RAM: ~1 per 2GB, clamped to [4, 12]) when queue depth exceeds 4 items per worker. Idle extras beyond 2 are terminated after 30s to reclaim WASM heap (Emscripten linear memory only grows).
+- **Download concurrency**: 32 concurrent texture downloads (`MAX_CONCURRENT_DOWNLOADS`).
 
 ## Bottleneck Analysis
 
 The pipeline has three stages with different bottlenecks:
 
 ### Stage 1: J2K Decode (CPU-bound, ~60-70% of per-texture time)
-- 4 worker threads, each with own WASM OpenJPEG instance
+- 2-12 auto-scaling worker threads, each with own WASM OpenJPEG instance
 - Wavelet transform is inherently sequential per tile
 - SIMD helps but J2K is just fundamentally slow
 - `decode: q=N active=N` — visible in stats line

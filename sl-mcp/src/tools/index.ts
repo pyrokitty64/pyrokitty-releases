@@ -8,6 +8,7 @@ import { navigationTools } from './navigation.js';
 import { socialTools } from './social.js';
 import { objectTools } from './objects.js';
 import { minesweeperTools } from './minesweeper.js';
+import { avatarExportTools } from './avatar-export.js';
 
 export type { ToolDef };
 
@@ -18,4 +19,5 @@ export const allTools: ToolDef[] = [
   ...socialTools,
   ...objectTools,
   ...minesweeperTools,
+  ...avatarExportTools,
 ];

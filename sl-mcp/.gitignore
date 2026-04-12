@@ -1,3 +1,5 @@
 node_modules
 .mcp.json
 dist/
+debug.log
+exports/*
