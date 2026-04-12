@@ -1,6 +1,8 @@
 #include "SLObjectManager.h"
 #include "SLWebSocketServer.h"
 #include "SLGlbLoader.h"
+#include "SLBctexLoader.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "SLCoordConvert.h"
 #include "UnrealViewerModule.h"
 #include "Engine/StaticMeshActor.h"
@@ -46,14 +48,16 @@ void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Collection.InitializeDependency<USLWebSocketServer>();
 	Collection.InitializeDependency<USLGlbLoader>();
+	Collection.InitializeDependency<USLBctexLoader>();
 
 	Super::Initialize(Collection);
 
 	UGameInstance* GI = GetGameInstance();
 	WebSocket = GI->GetSubsystem<USLWebSocketServer>();
 	GlbLoader = GI->GetSubsystem<USLGlbLoader>();
+	BctexLoader = GI->GetSubsystem<USLBctexLoader>();
 
-	if (!WebSocket || !GlbLoader)
+	if (!WebSocket || !GlbLoader || !BctexLoader)
 	{
 		UE_LOG(LogSLViewer, Error, TEXT("[ObjectManager] Missing required subsystems"));
 		return;
@@ -270,7 +274,7 @@ void USLObjectManager::HandleObjectRender(const TSharedPtr<FJsonObject>& Json)
 		GodotRotations.Add(Uuid, WorldRot);
 	}
 
-	AActor* Actor = SpawnObjectActor(Uuid, Mesh, Transform);
+	AActor* Actor = SpawnObjectActor(Uuid, Mesh, Transform, Json);
 	if (!Actor)
 	{
 		return;
@@ -294,7 +298,7 @@ void USLObjectManager::HandleObjectRender(const TSharedPtr<FJsonObject>& Json)
 	}
 }
 
-AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mesh, const FTransform& Transform)
+AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mesh, const FTransform& Transform, const TSharedPtr<FJsonObject>& Json)
 {
 	UWorld* World = GetGameInstance()->GetWorld();
 	if (!World)
@@ -311,13 +315,106 @@ AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mes
 		return nullptr;
 	}
 
-	// Create mesh as root component and apply transform directly to it
 	UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(Actor, TEXT("Mesh"));
 	MeshComp->SetStaticMesh(Mesh);
 	MeshComp->SetMobility(EComponentMobility::Movable);
 	Actor->SetRootComponent(MeshComp);
 	MeshComp->RegisterComponent();
 	Actor->SetActorTransform(Transform);
+
+	// Apply textures per face
+	const TArray<TSharedPtr<FJsonValue>>* FacesArray;
+	if (Json->TryGetArrayField(TEXT("faces"), FacesArray))
+	{
+		for (const TSharedPtr<FJsonValue>& FaceVal : *FacesArray)
+		{
+			const TSharedPtr<FJsonObject>* FaceObjPtr;
+			if (!FaceVal->TryGetObject(FaceObjPtr))
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>& Face = *FaceObjPtr;
+
+			double FaceIndex = 0;
+			Face->TryGetNumberField(TEXT("index"), FaceIndex);
+			const int32 MatIndex = static_cast<int32>(FaceIndex);
+
+			// Load texture
+			FString TextureId, TexturePath;
+			Face->TryGetStringField(TEXT("textureId"), TextureId);
+			Face->TryGetStringField(TEXT("texturePath"), TexturePath);
+
+			UTexture2D* Texture = nullptr;
+			if (!TextureId.IsEmpty() && !TexturePath.IsEmpty())
+			{
+				Texture = BctexLoader->LoadTexture(TextureId, TexturePath);
+			}
+
+			if (!Texture)
+			{
+				continue;
+			}
+
+			// Get color tint
+			FLinearColor Color = FLinearColor::White;
+			const TArray<TSharedPtr<FJsonValue>>* ColorArr;
+			if (Face->TryGetArrayField(TEXT("color"), ColorArr) && ColorArr->Num() >= 4)
+			{
+				Color = FLinearColor(
+					(*ColorArr)[0]->AsNumber(),
+					(*ColorArr)[1]->AsNumber(),
+					(*ColorArr)[2]->AsNumber(),
+					(*ColorArr)[3]->AsNumber()
+				);
+			}
+
+			// Pick master material based on alphaMode
+			// 0 = opaque, 1 = mask (alpha cutoff), 2 = blend (translucent)
+			double AlphaMode = 0;
+			Face->TryGetNumberField(TEXT("alphaMode"), AlphaMode);
+			// resolvedAlphaMode overrides if present (Electron computes this)
+			Face->TryGetNumberField(TEXT("resolvedAlphaMode"), AlphaMode);
+
+			static UMaterialInterface* MatOpaque = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/glTFRuntime/M_glTFRuntimeBase"));
+			static UMaterialInterface* MatMasked = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/glTFRuntime/M_glTFRuntimeMasked_Inst"));
+			static UMaterialInterface* MatTranslucent = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
+
+			UMaterialInterface* BaseMat = MatOpaque;
+			if (static_cast<int32>(AlphaMode) == 1 && MatMasked)
+			{
+				BaseMat = MatMasked;
+			}
+			else if (static_cast<int32>(AlphaMode) == 2 && MatTranslucent)
+			{
+				BaseMat = MatTranslucent;
+			}
+
+			if (!BaseMat)
+			{
+				continue;
+			}
+
+			UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(BaseMat, Actor);
+			if (DynMat)
+			{
+				DynMat->SetTextureParameterValue(TEXT("baseColorTexture"), Texture);
+				DynMat->SetVectorParameterValue(TEXT("baseColorFactor"), Color);
+
+				// Set alpha cutoff for masked materials
+				if (static_cast<int32>(AlphaMode) == 1)
+				{
+					double Cutoff = 0.5;
+					Face->TryGetNumberField(TEXT("alphaCutoff"), Cutoff);
+					DynMat->SetScalarParameterValue(TEXT("alphaCutoff"), static_cast<float>(Cutoff));
+				}
+
+				MeshComp->SetMaterial(MatIndex, DynMat);
+			}
+		}
+	}
 
 #if WITH_EDITOR
 	Actor->SetActorLabel(*Uuid.Left(8));

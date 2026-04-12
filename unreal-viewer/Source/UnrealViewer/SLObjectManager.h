@@ -7,6 +7,7 @@
 
 class USLWebSocketServer;
 class USLGlbLoader;
+class USLBctexLoader;
 
 /**
  * Core object lifecycle manager — spawns, updates, and destroys actors
@@ -42,7 +43,7 @@ private:
 	FTransform ComputeWorldTransform(const TSharedPtr<FJsonObject>& Json, const FString& ParentUuid);
 
 	/** Spawn an actor for an object with the given mesh and transform. */
-	AActor* SpawnObjectActor(const FString& Uuid, UStaticMesh* Mesh, const FTransform& Transform);
+	AActor* SpawnObjectActor(const FString& Uuid, UStaticMesh* Mesh, const FTransform& Transform, const TSharedPtr<FJsonObject>& Json);
 
 	/** Resolve any children waiting for this parent to arrive. */
 	void ResolvePendingChildren(const FString& ParentUuid);
@@ -59,6 +60,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USLGlbLoader> GlbLoader;
+
+	UPROPERTY()
+	TObjectPtr<USLBctexLoader> BctexLoader;
 
 	/** UUID -> spawned actor */
 	UPROPERTY()
