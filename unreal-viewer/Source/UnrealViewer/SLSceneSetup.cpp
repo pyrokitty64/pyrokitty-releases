@@ -70,7 +70,7 @@ void USLSceneSetup::SetupScene()
 		ADirectionalLight* Sun = World->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-45.0f, -30.0f, 0.0f), Params);
 		if (Sun)
 		{
-			UDirectionalLightComponent* LightComp = Sun->GetComponent();
+			UDirectionalLightComponent* LightComp = Cast<UDirectionalLightComponent>(Sun->GetLightComponent());
 			if (LightComp)
 			{
 				LightComp->SetIntensity(10.0f);

@@ -71,8 +71,14 @@ function getUnrealProjectRoot(): string {
     : path.join(__dirname, '..', '..', '..', 'unreal-viewer');
 }
 
+/** Packaged standalone game exe (cooked build, no UE5 install needed). */
+function getPackagedExePath(): string | null {
+  const exe = path.join(getUnrealProjectRoot(), 'UnrealViewer.exe');
+  return fs.existsSync(exe) ? exe : null;
+}
+
 function getUnrealEditorPath(): string {
-  // UE5.7 at standard Epic install location
+  // UE5.7 at standard Epic install location — dev-mode fallback
   return path.join('C:', 'Program Files', 'Epic Games', 'UE_5.7', 'Engine', 'Binaries', 'Win64', 'UnrealEditor.exe');
 }
 
@@ -188,8 +194,12 @@ export class UnrealBridge extends EventEmitter {
     this.port = await findFreePort(nextPort);
     nextPort = this.port + 1;
 
-    const editorPath = getUnrealEditorPath();
-    const projectFile = getUnrealProjectFile();
+    // Prefer packaged standalone exe; fall back to UnrealEditor -game in dev
+    const packagedExe = getPackagedExePath();
+    const exePath = packagedExe ?? getUnrealEditorPath();
+    const spawnArgs = packagedExe
+      ? ['-log', `-ws-port=${this.port}`]
+      : [getUnrealProjectFile(), '-game', '-log', `-ws-port=${this.port}`];
 
     // Ensure cache directories exist
     const cacheBase = getCacheDirBase();
@@ -202,15 +212,10 @@ export class UnrealBridge extends EventEmitter {
     // Subscribe to circuit-specific messages (animation, appearance, sit)
     this.subscribeToCircuit();
 
-    console.log(`[UnrealBridge] Spawning UE5 on port ${this.port} — ${editorPath}`);
+    console.log(`[UnrealBridge] Spawning UE5 on port ${this.port} — ${exePath}${packagedExe ? ' (packaged)' : ' (editor -game)'}`);
 
-    // Launch UE5 in -game mode with WebSocket port
-    this.process = spawn(editorPath, [
-      projectFile,
-      '-game',
-      '-log',
-      `-ws-port=${this.port}`,
-    ], {
+    // Launch UE5 viewer
+    this.process = spawn(exePath, spawnArgs, {
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

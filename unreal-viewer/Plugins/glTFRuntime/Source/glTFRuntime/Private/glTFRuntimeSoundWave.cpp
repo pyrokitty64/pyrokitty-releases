@@ -33,8 +33,47 @@ int32 UglTFRuntimeSoundWave::GeneratePCMData(uint8* PCMData, const int32 Samples
 
 	int64 BytesToCopy = FMath::Min(RuntimeAudioData.Num() - RuntimeAudioOffset, BytesNeeded);
 	FMemory::Memcpy(PCMData, RuntimeAudioData.GetData() + RuntimeAudioOffset, BytesToCopy);
+
+	if (OnPCMData.IsBound())
+	{
+		TArray<uint8> NewPCMData;
+		NewPCMData.Append(RuntimeAudioData.GetData() + RuntimeAudioOffset, BytesToCopy);
+		FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([OnPCMData = this->OnPCMData, NewPCMData]()
+			{
+				OnPCMData.Execute(NewPCMData);
+			}, TStatId(), nullptr, ENamedThreads::GameThread);
+	}
+
+	if (OnPCMDataFloat.IsBound())
+	{
+		TArray<float> NewPCMData;
+		int32 NumSamplesFloat = BytesToCopy / sizeof(int16);
+		NewPCMData.AddUninitialized(NumSamplesFloat);
+		const int16* SamplesInt16 = reinterpret_cast<const int16*>(RuntimeAudioData.GetData() + RuntimeAudioOffset);
+		for (int32 Index = 0; Index < NumSamplesFloat; Index++)
+		{
+			NewPCMData[Index] = SamplesInt16[Index] / 32768.0f;
+		}
+
+		FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([OnPCMDataFloat = this->OnPCMDataFloat, NewPCMData]()
+			{
+				OnPCMDataFloat.Execute(NewPCMData);
+			}, TStatId(), nullptr, ENamedThreads::GameThread);
+	}
+
 	RuntimeAudioOffset += BytesToCopy;
+
 	return BytesToCopy;
+}
+
+void UglTFRuntimeSoundWave::SetOnPCMData(const FglTFRuntimeSoundWavePCMData& InOnPCMData)
+{
+	OnPCMData = InOnPCMData;
+}
+
+void UglTFRuntimeSoundWave::SetOnPCMDataFloat(const FglTFRuntimeSoundWavePCMDataFloat& InOnPCMDataFloat)
+{
+	OnPCMDataFloat = InOnPCMDataFloat;
 }
 
 void UglTFRuntimeSoundWave::ResetAudioOffset()

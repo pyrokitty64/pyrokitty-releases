@@ -24,6 +24,7 @@ VIEWER_STAGING="$ELECTRON_DIR/viewer"
 # Parse arguments
 SKIP_VIEWER_BUILD=false
 SKIP_CONFIGURE=false
+SKIP_UNREAL=false
 FORCE_REBUILD=false
 
 OVERRIDE_VERSION=""
@@ -33,6 +34,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  --skip-viewer     Skip building Firestorm (use existing build)"
+    echo "  --skip-unreal     Skip Unreal viewer cook/package step"
     echo "  --skip-configure  Skip autobuild configure step (just build)"
     echo "  --force           Force rebuild even if files are up to date"
     echo "  --version X.Y.Z   Set version explicitly (skip GitHub fetch)"
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --skip-viewer)
             SKIP_VIEWER_BUILD=true
+            shift
+            ;;
+        --skip-unreal)
+            SKIP_UNREAL=true
             shift
             ;;
         --skip-configure)
@@ -284,6 +290,55 @@ if [ -d "$GODOT_SRC" ]; then
     echo "  Godot staging complete: $(du -sh "$GODOT_STAGING" | cut -f1)"
 else
     echo "  WARNING: Godot viewer not found at $GODOT_SRC, skipping..."
+fi
+
+# Step 3b: Package and stage Unreal viewer
+echo ""
+echo "Step 3b: Packaging Unreal viewer..."
+
+UNREAL_SRC="$ROOT_DIR/unreal-viewer"
+UNREAL_STAGING="$ELECTRON_DIR/unreal-viewer-staging"
+UE_ROOT="C:/Program Files/Epic Games/UE_5.7"
+RUNUAT="$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat"
+UNREAL_ARCHIVE_DIR="$ROOT_DIR/../unreal-viewer-package"
+UNREAL_PACKAGE_DIR="$UNREAL_ARCHIVE_DIR/Windows"
+
+if [ "$SKIP_UNREAL" = true ]; then
+    echo "  Skipped (--skip-unreal)"
+elif [ ! -d "$UNREAL_SRC" ]; then
+    echo "  WARNING: Unreal viewer not found at $UNREAL_SRC, skipping..."
+elif [ ! -f "$RUNUAT" ]; then
+    echo "  WARNING: UE5 not installed at $UE_ROOT, skipping Unreal packaging..."
+else
+    NEEDS_UNREAL_BUILD=false
+    if [ "$FORCE_REBUILD" = true ]; then
+        NEEDS_UNREAL_BUILD=true
+    elif [ ! -f "$UNREAL_STAGING/UnrealViewer.exe" ]; then
+        NEEDS_UNREAL_BUILD=true
+    elif needs_rebuild "$UNREAL_SRC/Source" "$UNREAL_STAGING/UnrealViewer.exe" "*.cpp"; then
+        NEEDS_UNREAL_BUILD=true
+    elif needs_rebuild "$UNREAL_SRC/Source" "$UNREAL_STAGING/UnrealViewer.exe" "*.h"; then
+        NEEDS_UNREAL_BUILD=true
+    fi
+
+    if [ "$NEEDS_UNREAL_BUILD" = true ]; then
+        echo "  Cooking and packaging (Development, Win64)..."
+        "$RUNUAT" BuildCookRun \
+            -project="$(cygpath -w "$UNREAL_SRC/UnrealViewer.uproject")" \
+            -noP4 \
+            -platform=Win64 \
+            -clientconfig=Development \
+            -cook -allmaps -build -stage -pak -archive \
+            -archivedirectory="$(cygpath -w "$UNREAL_ARCHIVE_DIR")" \
+            -unattended -utf8output
+
+        rm -rf "$UNREAL_STAGING"
+        mkdir -p "$UNREAL_STAGING"
+        cp -r "$UNREAL_PACKAGE_DIR/"* "$UNREAL_STAGING/"
+        echo "  Unreal staging complete: $(du -sh "$UNREAL_STAGING" | cut -f1)"
+    else
+        echo "  Unreal staging up to date, skipping..."
+    fi
 fi
 
 # Step 4: Stage voice sidecar

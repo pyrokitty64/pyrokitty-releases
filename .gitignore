@@ -174,3 +174,4 @@ unreal-viewer/.vs/
 unreal-viewer/*.sln
 unreal-viewer/Plugins/glTFRuntime/Intermediate/
 unreal-viewer/Plugins/glTFRuntime/Binaries/
+unreal-viewer/Build/

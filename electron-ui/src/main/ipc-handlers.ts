@@ -17,6 +17,38 @@ import { InventoryWalker } from './inventory/inventory-walker';
 // Track inventory walkers per instance
 const inventoryWalkers = new Map<string, InventoryWalker>();
 
+function startInventorySync(instanceId: string, mainWindow: BrowserWindow, opts?: { enable3dThumbnails?: boolean }): void {
+  const oldWalker = inventoryWalkers.get(instanceId);
+  if (oldWalker) oldWalker.abort();
+
+  const instance = viewerManager.getInstance(instanceId);
+  if (!instance?.accountId) return;
+  const metaverse = metaverseConnectionManager.get(instanceId);
+  const bot = metaverse?.getBot();
+  if (!bot) return;
+
+  const account = accountManager.getAccount(instance.accountId);
+  const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
+  const walker = new InventoryWalker(bot, folderName, (progress) => {
+    mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, {
+      instanceId,
+      phase: progress.phase === 'done' ? 'done' : 'downloading',
+      current: progress.phase === 'folders' ? progress.foldersComplete : progress.itemsComplete ?? 0,
+      total: progress.phase === 'folders' ? progress.foldersTotal : progress.itemsTotal ?? 0,
+      uploadCost: -1,
+    } as SyncStatus);
+  });
+  if (opts?.enable3dThumbnails) walker.enable3dThumbnails = true;
+  inventoryWalkers.set(instanceId, walker);
+  walker.walk().catch(err => console.error('[InventoryWalker] Error:', err));
+}
+
+function stopInventorySync(instanceId: string): void {
+  const oldWalker = inventoryWalkers.get(instanceId);
+  if (oldWalker) oldWalker.abort();
+  inventoryWalkers.delete(instanceId);
+}
+
 function saveChatMessage(instanceId: string, message: ChatMessage): void {
   const instance = viewerManager.getInstance(instanceId);
   if (!instance) return;
@@ -345,32 +377,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   // Inventory sync handlers
   ipcMain.handle(IPC_CHANNELS.SYNC_START, async (_, instanceId: string) => {
     console.log(`[Sync] Manual SYNC_START for instance=${instanceId}`);
-    // Abort any existing walker and start a fresh one
-    const oldWalker = inventoryWalkers.get(instanceId);
-    if (oldWalker) oldWalker.abort();
-
-    const instance = viewerManager.getInstance(instanceId);
-    if (!instance) throw new Error('Cannot sync: no instance');
-    const metaverse = metaverseConnectionManager.get(instanceId);
-    const bot = metaverse?.getBot();
-    if (!bot) throw new Error('Cannot sync: not connected');
-
-    const account = accountManager.getAccount(instance.accountId);
-    const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
-    const walker = new InventoryWalker(bot, folderName, (progress) => {
-      mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, {
-        instanceId,
-        phase: progress.phase === 'done' ? 'done' : 'downloading',
-        current: progress.phase === 'folders' ? progress.foldersComplete : progress.itemsComplete ?? 0,
-        total: progress.phase === 'folders' ? progress.foldersTotal : progress.itemsTotal ?? 0,
-        uploadCost: -1,
-      } as SyncStatus);
-    });
-    walker.enable3dThumbnails = true; // manual sync → allow HUD attach for thumbnails
-    // DEV: restrict to a single folder for thumbnail testing
-    // walker.folderFilter = "TEST OBJECTS";
-    inventoryWalkers.set(instanceId, walker);
-    walker.walk().catch(err => console.error('[InventoryWalker] Manual sync error:', err));
+    startInventorySync(instanceId, mainWindow, { enable3dThumbnails: true });
     return true;
   });
 
@@ -388,49 +395,19 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     shell.openPath(dir);
   });
 
-  // Auto-start sync when metaverse connects
-  metaverseConnectionManager.on('state-change', (instanceId: string, state: string) => {
-    if (state === 'metaverse_connected') {
-      // Small delay to let everything settle
-      setTimeout(() => {
-        // Check state hasn't changed (e.g. viewer launched and kicked the bot)
-        const instance = viewerManager.getInstance(instanceId);
-        if (!instance || instance.connectionState !== 'metaverse_connected') {
-          console.log(`[IPC] Skipping auto-sync: state is now ${instance?.connectionState ?? 'gone'}`);
-          return;
-        }
-        // Start inventory walker (full inventory mirror to disk)
-        const metaverse = metaverseConnectionManager.get(instanceId);
-        const bot = metaverse?.getBot();
-        if (bot && instance.accountId) {
-          // Abort any previous walker for this instance
-          const oldWalker = inventoryWalkers.get(instanceId);
-          if (oldWalker) oldWalker.abort();
-
-          const account = accountManager.getAccount(instance.accountId);
-          const folderName = account ? `${account.firstName} ${account.lastName}` : instance.accountId;
-          const walker = new InventoryWalker(bot, folderName, (progress) => {
-            mainWindow.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, {
-              instanceId,
-              phase: progress.phase === 'done' ? 'done' : 'downloading',
-              current: progress.phase === 'folders' ? progress.foldersComplete : progress.itemsComplete,
-              total: progress.phase === 'folders' ? progress.foldersTotal : progress.itemsTotal,
-              uploadCost: -1,
-            });
-          });
-          // DEV: restrict to a single folder for thumbnail testing
-          // walker.folderFilter = "TEST OBJECTS";
-          inventoryWalkers.set(instanceId, walker);
-          walker.walk().catch(err => console.error('[InventoryWalker] Error:', err));
-        }
-      }, 2000);
-    } else if (state === 'disconnected' || state === 'logging_in' || state === 'viewer_connected') {
-      // Abort inventory walker
-      const oldWalker = inventoryWalkers.get(instanceId);
-      if (oldWalker) oldWalker.abort();
-      inventoryWalkers.delete(instanceId);
-    }
-  });
+  // Auto-start sync when metaverse connects — DISABLED for now (manual sync still available)
+  // metaverseConnectionManager.on('state-change', (instanceId: string, state: string) => {
+  //   if (state === 'metaverse_connected') {
+  //     setTimeout(() => {
+  //       const inst = viewerManager.getInstance(instanceId);
+  //       if (inst?.connectionState === 'metaverse_connected') {
+  //         startInventorySync(instanceId, mainWindow);
+  //       }
+  //     }, 2000);
+  //   } else if (state === 'disconnected' || state === 'logging_in' || state === 'viewer_connected') {
+  //     stopInventorySync(instanceId);
+  //   }
+  // });
 
   // Forward WebSocket events to renderer
   connectionManager.on('viewer-connected', (instanceId: string, apis: any[]) => {

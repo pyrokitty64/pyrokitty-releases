@@ -92,8 +92,11 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromFilename(const FString& F
 	{
 		if (LoaderConfig.bAllowExternalFiles)
 		{
-			// allows to load external files
-			Parser->BaseDirectory = FPaths::GetPath(TruePath);
+			if (!(Parser->IsArchive() && LoaderConfig.bBaseDirectoryFromArchiveEntryPoint))
+			{
+				// allows to load external files
+				Parser->BaseDirectory = FPaths::GetPath(TruePath);
+			}
 		}
 		Parser->BaseFilename = FPaths::GetBaseFilename(TruePath);
 	}
@@ -136,6 +139,11 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromRawDataAndArchive(const u
 			return nullptr;
 		}
 
+		if (LoaderConfig.bBaseDirectoryFromArchiveEntryPoint)
+		{
+			InArchive->BaseDirectory = FPaths::GetPath(Filename);
+		}
+
 		if (ArchiveEntryPointData.Num() > 0)
 		{
 			DataPtr = ArchiveEntryPointData.GetData();
@@ -155,8 +163,43 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromRawDataAndArchive(const u
 		{
 			NewParser->AsBlob.Append(DataPtr, DataNum);
 			NewParser->Archive = InArchive;
+			if (NewParser->Archive.IsValid() && LoaderConfig.ArchiveUriRewriterHook.IsBound())
+			{
+				TArray<FString> ArchiveKeys;
+				NewParser->Archive->GetItems(ArchiveKeys);
+				for (const FString& ArchiveKey : ArchiveKeys)
+				{
+					if (IsInGameThread())
+					{
+						if (LoaderConfig.ArchiveUriRewriterHook.UriRewriter.IsBound())
+						{
+							NewParser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.UriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+						}
+						else if (LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.IsBound())
+						{
+							NewParser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+						}
+					}
+					else
+					{
+						FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+							{
+								if (LoaderConfig.ArchiveUriRewriterHook.UriRewriter.IsBound())
+								{
+									NewParser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.UriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+								}
+								else if (LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.IsBound())
+								{
+									NewParser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+								}
+							}, TStatId(), nullptr, ENamedThreads::GameThread);
+						FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
+					}
+				}
+			}
 			NewParser->AssetUserDataClasses = LoaderConfig.AssetUserDataClasses;
 		}
+
 		return NewParser;
 	}
 
@@ -537,7 +580,6 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromData(const uint8* DataPtr
 		// given the block nature of tar files, it is more memory efficient to extract the files directly
 		int64 ByteIndex = 0;
 		bool bTarParsingFailed = false;
-		int64 TarPrefixLen = 0;
 		while (ByteIndex < DataNum)
 		{
 			const uint8* Block = DataPtr + ByteIndex;
@@ -576,22 +618,10 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromData(const uint8* DataPtr
 				break;
 			}
 
-			// first entry ?
-			if (ByteIndex == 512)
-			{
-				const FString TarPrefix = GetTarString(Block, 100);
-				TarPrefixLen = TarPrefix.Len();
-			}
-
-			if (Block[156] == 0 || Block[156] == '0' || Block[156] == '7')
+			if (Block[156] == 0 || Block[156] == '0' || Block[156] == '5' || Block[156] == '7')
 			{
 				const FString TarFilename = GetTarString(Block, 100);
-				if (TarFilename.Len() <= TarPrefixLen)
-				{
-					bTarParsingFailed = true;
-					break;
-				}
-				TArray64<uint8>& TarFileContent = TarMap.Add(TarFilename.RightChop(TarPrefixLen));
+				TArray64<uint8>& TarFileContent = TarMap.Add(TarFilename);
 				TarFileContent.AddUninitialized(FileSize);
 				FMemory::Memcpy(TarFileContent.GetData(), DataPtr + ByteIndex, FileSize);
 			}
@@ -653,7 +683,45 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromString(const FString& Jso
 		}
 		Parser->DefaultPrefixForUnnamedNodes = LoaderConfig.PrefixForUnnamedNodes;
 		Parser->Archive = InArchive;
+		if (Parser->Archive.IsValid())
+		{
+			if (LoaderConfig.ArchiveUriRewriterHook.IsBound())
+			{
+				TArray<FString> ArchiveKeys;
+				Parser->Archive->GetItems(ArchiveKeys);
+				for (const FString& ArchiveKey : ArchiveKeys)
+				{
+					if (IsInGameThread())
+					{
+						if (LoaderConfig.ArchiveUriRewriterHook.UriRewriter.IsBound())
+						{
+							Parser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.UriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+						}
+						else if (LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.IsBound())
+						{
+							Parser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+						}
+					}
+					else
+					{
+						FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+							{
+								if (LoaderConfig.ArchiveUriRewriterHook.UriRewriter.IsBound())
+								{
+									Parser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.UriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+								}
+								else if (LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.IsBound())
+								{
+									Parser->Archive->Remap(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.NativeUriRewriter.Execute(ArchiveKey, LoaderConfig.ArchiveUriRewriterHook.Context));
+								}
+							}, TStatId(), nullptr, ENamedThreads::GameThread);
+						FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
+					}
+				}
+			}
+		}
 		Parser->AssetUserDataClasses = LoaderConfig.AssetUserDataClasses;
+		Parser->UriRewriterHook = LoaderConfig.UriRewriterHook;
 	}
 
 	return Parser;
@@ -1805,7 +1873,7 @@ bool FglTFRuntimeParser::LoadAnimation_Internal(TSharedRef<FJsonObject> JsonAnim
 		Callback(Node, Path, AnimationCurve);
 	}
 
-	return true;	
+	return true;
 }
 
 TArray<FString> FglTFRuntimeParser::GetCamerasNames()
@@ -4501,10 +4569,49 @@ bool FglTFRuntimeParser::GetBuffer(const int32 Index, FglTFRuntimeBlob& Blob)
 		}
 		return false;
 	}
+	else if (Uri.StartsWith("http://") || Uri.StartsWith("https://"))
+	{
+		AddError("GetBuffer()", FString::Printf(TEXT("Unable to open from external url %s (feature not supported)"), *Uri));
+		return false;
+	}
+
+	if (UriRewriterHook.IsBound())
+	{
+		if (IsInGameThread())
+		{
+			if (UriRewriterHook.UriRewriter.IsBound())
+			{
+				Uri = UriRewriterHook.UriRewriter.Execute(Uri, UriRewriterHook.Context);
+			}
+			else if (UriRewriterHook.NativeUriRewriter.IsBound())
+			{
+				Uri = UriRewriterHook.NativeUriRewriter.Execute(Uri, UriRewriterHook.Context);
+			}
+		}
+		else
+		{
+			FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+				{
+					if (UriRewriterHook.UriRewriter.IsBound())
+					{
+						Uri = UriRewriterHook.UriRewriter.Execute(Uri, UriRewriterHook.Context);
+					}
+					else if (UriRewriterHook.NativeUriRewriter.IsBound())
+					{
+						Uri = UriRewriterHook.NativeUriRewriter.Execute(Uri, UriRewriterHook.Context);
+					}
+				}, TStatId(), nullptr, ENamedThreads::GameThread);
+			FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
+		}
+	}
 
 	if (Archive)
 	{
 		TArray64<uint8> ArchiveItemData;
+		if (!Archive->BaseDirectory.IsEmpty())
+		{
+			Uri = FPaths::Combine(Archive->BaseDirectory, Uri);
+		}
 		if (Archive->GetFileContent(Uri, ArchiveItemData))
 		{
 			BuffersCache.Add(Index, ArchiveItemData);
@@ -5635,6 +5742,31 @@ bool FglTFRuntimeArchive::FileExists(const FString& Filename) const
 	return OffsetsMap.Contains(Filename);
 }
 
+void FglTFRuntimeArchive::Remap(const FString& From, const FString& To)
+{
+	if (OffsetsMap.Contains(From))
+	{
+		const uint32 CurrentValue = OffsetsMap[From];
+		OffsetsMap.Remove(From);
+		if (OffsetsMap.Contains(To))
+		{
+			OffsetsMap.Remove(To);
+		}
+		OffsetsMap.Add(To, CurrentValue);
+	}
+
+	if (GlobalSizeMap.Contains(From))
+	{
+		const TPair<uint32, uint32> CurrentValue = GlobalSizeMap[From];
+		GlobalSizeMap.Remove(From);
+		if (GlobalSizeMap.Contains(To))
+		{
+			GlobalSizeMap.Remove(To);
+		}
+		GlobalSizeMap.Add(To, CurrentValue);
+	}
+}
+
 FString FglTFRuntimeArchive::GetFirstFilenameByExtension(const FString& Extension) const
 {
 	for (const TPair<FString, uint32>& Pair : OffsetsMap)
@@ -5668,9 +5800,43 @@ bool FglTFRuntimeParser::GetJsonObjectBytes(TSharedRef<FJsonObject> JsonObject, 
 		}
 		else
 		{
+			if (UriRewriterHook.IsBound())
+			{
+				if (IsInGameThread())
+				{
+					if (UriRewriterHook.UriRewriter.IsBound())
+					{
+						Uri = UriRewriterHook.UriRewriter.Execute(Uri, UriRewriterHook.Context);
+					}
+					else if (UriRewriterHook.NativeUriRewriter.IsBound())
+					{
+						Uri = UriRewriterHook.NativeUriRewriter.Execute(Uri, UriRewriterHook.Context);
+					}
+				}
+				else
+				{
+					FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+						{
+							if (UriRewriterHook.UriRewriter.IsBound())
+							{
+								Uri = UriRewriterHook.UriRewriter.Execute(Uri, UriRewriterHook.Context);
+							}
+							else if (UriRewriterHook.NativeUriRewriter.IsBound())
+							{
+								Uri = UriRewriterHook.NativeUriRewriter.Execute(Uri, UriRewriterHook.Context);
+							}
+						}, TStatId(), nullptr, ENamedThreads::GameThread);
+					FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
+				}
+			}
+
 			bool bFound = false;
 			if (Archive)
 			{
+				if (!Archive->BaseDirectory.IsEmpty())
+				{
+					Uri = FPaths::Combine(Archive->BaseDirectory, Uri);
+				}
 				if (Archive->GetFileContent(Uri, Bytes))
 				{
 					bFound = true;

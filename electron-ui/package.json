@@ -125,6 +125,13 @@
                 ]
             },
             {
+                "from": "unreal-viewer-staging",
+                "to": "unreal-viewer",
+                "filter": [
+                    "**/*"
+                ]
+            },
+            {
                 "from": "bin",
                 "to": "bin",
                 "filter": [
