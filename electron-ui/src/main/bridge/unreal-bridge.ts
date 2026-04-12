@@ -198,8 +198,8 @@ export class UnrealBridge extends EventEmitter {
     const packagedExe = getPackagedExePath();
     const exePath = packagedExe ?? getUnrealEditorPath();
     const spawnArgs = packagedExe
-      ? ['-log', `-ws-port=${this.port}`]
-      : [getUnrealProjectFile(), '-game', '-log', `-ws-port=${this.port}`];
+      ? ['-windowed', '-ResX=1024', '-ResY=768', `-ws-port=${this.port}`]
+      : [getUnrealProjectFile(), '-game', '-windowed', '-ResX=1024', '-ResY=768', '-log', `-ws-port=${this.port}`];
 
     // Ensure cache directories exist
     const cacheBase = getCacheDirBase();
