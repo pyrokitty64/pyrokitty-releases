@@ -4,8 +4,8 @@
  * Dedup key is textureUuid_type since same texture with different sculpt flags = different geometry.
  */
 
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
 import { isSculptCached, sculptCachePath, ensureSculptCached, sculptMeshId } from './sculpt-converter';
 import type { DecodePool } from './decode-pool';
 import { pkDebug } from '../pk-debug';

@@ -6,8 +6,8 @@
  * All tracking is keyed by object/avatar UUID strings (not numeric localIds).
  */
 
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
+import type { Bot } from '../../../node-metaverse/lib';
+import { Message } from '../../../node-metaverse/lib/enums/Message';
 /** Fields we actually read from animation circuit messages (may be missing on truncated packets). */
 type AnimationPacket = { Sender?: { ID?: { toString(): string } }; AnimationList?: { AnimID: { toString(): string }; AnimSequenceID: number }[] };
 import type { AnimationFetchQueue } from '../assets/animation-fetch-queue';

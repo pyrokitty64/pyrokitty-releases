@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 
-import { SculptType } from '../../../node-metaverse/dist/lib';
+import { SculptType } from '../../../node-metaverse/lib';
 import type { DecodePool } from './decode-pool';
 
 type Vec3 = { x: number; y: number; z: number };

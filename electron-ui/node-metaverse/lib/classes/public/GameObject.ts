@@ -11,7 +11,7 @@ import type { NameValue } from '../NameValue';
 import type * as Long from 'long';
 import type { IGameObjectData } from '../interfaces/IGameObjectData';
 import type { XMLElement, XMLNode } from 'xmlbuilder';
-import * as builder from 'xmlbuilder';
+import builder from 'xmlbuilder';
 import type { Region } from '../Region';
 import { InventoryItem } from '../InventoryItem';
 import { LLWearable } from '../LLWearable';

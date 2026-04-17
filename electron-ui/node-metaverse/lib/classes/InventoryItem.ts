@@ -1,6 +1,6 @@
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import type { Subscription } from 'rxjs';
-import * as builder from 'xmlbuilder';
+import builder from 'xmlbuilder';
 import * as crypto from 'crypto';
 import { AssetType } from '../enums/AssetType';
 import type { AttachmentPoint } from '../enums/AttachmentPoint';

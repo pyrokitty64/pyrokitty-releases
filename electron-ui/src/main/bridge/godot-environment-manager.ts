@@ -9,11 +9,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { RegionEnvironment } from '../../../node-metaverse/dist/lib/classes/public/RegionEnvironment';
-import { LLSD } from '../../../node-metaverse/dist/lib/classes/llsd/LLSD';
-import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
-import type { TerrainCompleteEvent } from '../../../node-metaverse/dist/lib/events/TerrainCompleteEvent';
+import type { Bot } from '../../../node-metaverse/lib';
+import { RegionEnvironment } from '../../../node-metaverse/lib/classes/public/RegionEnvironment';
+import { LLSD } from '../../../node-metaverse/lib/classes/llsd/LLSD';
+import type { Region } from '../../../node-metaverse/lib/classes/Region';
+import type { TerrainCompleteEvent } from '../../../node-metaverse/lib/events/TerrainCompleteEvent';
 import { pkDebug } from '../pk-debug';
 
 function getCacheDirBase(): string {

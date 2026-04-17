@@ -14,7 +14,9 @@ public class UnrealViewer : ModuleRules
 			"Json",
 			"JsonUtilities",
 			"WebSocketNetworking",
-			"glTFRuntime"
+			"glTFRuntime",
+			"EnhancedInput",
+			"InputCore"
 		});
 	}
 }

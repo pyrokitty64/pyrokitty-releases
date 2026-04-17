@@ -12,7 +12,8 @@ import { UUID } from '../UUID';
 import { LLSDInteger } from './LLSDInteger';
 import { LLSDReal } from './LLSDReal';
 import { LLSDURI } from './LLSDURI';
-import { isFloat, isInt } from 'validator';
+import validator from 'validator';
+const { isFloat, isInt } = validator;
 
 export class LLSD
 {

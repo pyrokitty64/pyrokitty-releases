@@ -1,7 +1,8 @@
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import type { AssetType } from '../enums/AssetType';
 import { FilterResponse } from '../enums/FilterResponse';
 import { FolderType } from '../enums/FolderType';
@@ -64,7 +65,7 @@ export class InventoryFolder
         this.inventoryBase = invBase;
         const cacheLocation = InventoryFolder.cacheBasePath
             ? path.resolve(InventoryFolder.cacheBasePath)
-            : path.resolve(__dirname + '/cache');
+            : path.resolve(path.join(os.tmpdir(), 'node-metaverse-cache'));
         if (!fsSync.existsSync(cacheLocation))
         {
             fsSync.mkdirSync(cacheLocation, { recursive: true });

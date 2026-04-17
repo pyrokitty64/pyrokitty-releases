@@ -12,7 +12,7 @@ import { LandStatRequestMessage } from '../messages/LandStatRequest';
 import type { LandStatReportType } from '../../enums/LandStatReportType';
 import type { LandStatFlags } from '../../enums/LandStatFlags';
 import type { LandStatsEvent } from '../../events/LandStatsEvent';
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 
 // This class was added to provide a new "Category" of commands, since we don't have any parcel specific functionality yet.
 

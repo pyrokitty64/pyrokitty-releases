@@ -4,7 +4,7 @@
  */
 import { parentPort, workerData } from 'worker_threads';
 import { setCacheDir, ensureMeshCached, initSkeletonData } from './mesh-converter';
-import { LLMesh } from '../../../node-metaverse/dist/lib';
+import { LLMesh } from '../../../node-metaverse/lib';
 
 setCacheDir(workerData.cacheDir);
 const _ready = initSkeletonData();

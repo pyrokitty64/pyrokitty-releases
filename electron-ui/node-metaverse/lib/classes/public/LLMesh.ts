@@ -13,6 +13,16 @@ import type { LLSkin } from './interfaces/LLSkin';
 import type { LLSDType } from '../llsd/LLSDType';
 import { Matrix4 } from '../Matrix4';
 
+/** Coerce an LLSD value (LLSDReal, LLSDInteger, or raw number) to a JS number.
+ *  Returns undefined if the value is not numeric — callers can skip or throw. */
+function llsdNum(val: unknown): number | undefined
+{
+    if (val instanceof LLSDReal) return val.valueOf();
+    if (val instanceof LLSDInteger) return val.valueOf();
+    if (typeof val === 'number') return val;
+    return undefined;
+}
+
 export class LLMesh
 {
     public version?: number;
@@ -395,10 +405,8 @@ export class LLMesh
             const params = [];
             for(const num of mesh.bind_shape_matrix)
             {
-                if ((num as unknown) instanceof LLSDReal)
-                {
-                    params.push(num.valueOf());
-                }
+                const v = llsdNum(num);
+                if (v !== undefined) params.push(v);
             }
             skin.bindShapeMatrix = new Matrix4(params);
         }
@@ -413,10 +421,8 @@ export class LLMesh
                 {
                     for(const num of inv)
                     {
-                        if ((num as unknown) instanceof LLSDReal)
-                        {
-                            mtrx.push(num.valueOf());
-                        }
+                        const v = llsdNum(num);
+                        if (v !== undefined) mtrx.push(v);
                     }
                 }
                 skin.inverseBindMatrix.push(new Matrix4(mtrx));
@@ -432,10 +438,8 @@ export class LLMesh
                 {
                     for(const num of inv)
                     {
-                        if ((num as unknown) instanceof LLSDReal)
-                        {
-                            mtrx.push(num.valueOf());
-                        }
+                        const v = llsdNum(num);
+                        if (v !== undefined) mtrx.push(v);
                     }
                 }
                 skin.altInverseBindMatrix.push(new Matrix4(mtrx));
@@ -446,10 +450,8 @@ export class LLMesh
             const mtrx: number[] = [];
             for(const num of mesh.pelvis_offset)
             {
-                if ((num as unknown) instanceof LLSDReal)
-                {
-                    mtrx.push(num.valueOf());
-                }
+                const v = llsdNum(num);
+                if (v !== undefined) mtrx.push(v);
             }
             skin.pelvisOffset = new Matrix4(mtrx);
         }
@@ -560,34 +562,16 @@ export class LLMesh
                         if (Array.isArray(submesh.PositionDomain.Max))
                         {
                             const dom = submesh.PositionDomain.Max;
-                            if (dom[0] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.max.x = dom[0].valueOf();
-                            }
-                            if (dom[1] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.max.y = dom[1].valueOf();
-                            }
-                            if (dom[2] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.max.z = dom[2].valueOf();
-                            }
+                            const v0 = llsdNum(dom[0]); if (v0 !== undefined) decoded.positionDomain.max.x = v0;
+                            const v1 = llsdNum(dom[1]); if (v1 !== undefined) decoded.positionDomain.max.y = v1;
+                            const v2 = llsdNum(dom[2]); if (v2 !== undefined) decoded.positionDomain.max.z = v2;
                         }
                         if (Array.isArray(submesh.PositionDomain.Min))
                         {
                             const dom = submesh.PositionDomain.Min;
-                            if (dom[0] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.min.x = dom[0].valueOf();
-                            }
-                            if (dom[1] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.min.y = dom[1].valueOf();
-                            }
-                            if (dom[2] instanceof LLSDReal)
-                            {
-                                decoded.positionDomain.min.z = dom[2].valueOf();
-                            }
+                            const v0 = llsdNum(dom[0]); if (v0 !== undefined) decoded.positionDomain.min.x = v0;
+                            const v1 = llsdNum(dom[1]); if (v1 !== undefined) decoded.positionDomain.min.y = v1;
+                            const v2 = llsdNum(dom[2]); if (v2 !== undefined) decoded.positionDomain.min.z = v2;
                         }
                     }
                     decoded.position = this.decodeByteDomain3(submesh.Position, decoded.positionDomain.min, decoded.positionDomain.max);
@@ -613,43 +597,15 @@ export class LLMesh
                             const dom = submesh.TexCoord0Domain.Max;
                             if (Array.isArray(dom))
                             {
-                                if (dom[0] instanceof LLSDReal)
-                                {
-                                    decoded.texCoord0Domain.max.x = dom[0].valueOf();
-                                }
-                                else
-                                {
-                                    throw new Error('Unexpected type');
-                                }
-                                if (dom[1] instanceof LLSDReal)
-                                {
-                                    decoded.texCoord0Domain.max.y = dom[1].valueOf();
-                                }
-                                else
-                                {
-                                    throw new Error('Unexpected type');
-                                }
+                                const v0 = llsdNum(dom[0]); if (v0 !== undefined) decoded.texCoord0Domain.max.x = v0; else throw new Error('Unexpected type');
+                                const v1 = llsdNum(dom[1]); if (v1 !== undefined) decoded.texCoord0Domain.max.y = v1; else throw new Error('Unexpected type');
                             }
                         }
                         if (Array.isArray(submesh.TexCoord0Domain.Min))
                         {
                             const dom = submesh.TexCoord0Domain.Min;
-                            if (dom[0] instanceof LLSDReal)
-                            {
-                                decoded.texCoord0Domain.min.x = dom[0].valueOf();
-                            }
-                            else
-                            {
-                                throw new Error('Unexpected type');
-                            }
-                            if (dom[1] instanceof LLSDReal)
-                            {
-                                decoded.texCoord0Domain.min.y = dom[1].valueOf();
-                            }
-                            else
-                            {
-                                throw new Error('Unexpected type');
-                            }
+                            const v0 = llsdNum(dom[0]); if (v0 !== undefined) decoded.texCoord0Domain.min.x = v0; else throw new Error('Unexpected type');
+                            const v1 = llsdNum(dom[1]); if (v1 !== undefined) decoded.texCoord0Domain.min.y = v1; else throw new Error('Unexpected type');
                         }
                     }
                     else

@@ -4,8 +4,8 @@
  * compresses to BC1/BC3 .bctex (GPU when available, CPU fallback), writes to disk cache.
  */
 
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
 import { DecodePool } from './decode-pool';
 import { GpuCompressQueue } from './gpu-compress-queue';
 import { gpuCompressionAvailable } from './gpu-compress-window';

@@ -1,7 +1,7 @@
 import { UUID } from './UUID';
 import { InventoryFolder } from './InventoryFolder';
 import type { Agent } from './Agent';
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import { InventoryItem } from './InventoryItem';
 import type { FolderType } from '../enums/FolderType';
 import { InventoryLibrary } from '../enums/InventoryLibrary';

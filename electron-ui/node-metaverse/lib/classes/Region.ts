@@ -22,7 +22,7 @@ import { LayerType } from '../enums/LayerType';
 import type { Subscription } from 'rxjs';
 import { Subject } from 'rxjs';
 import { BitPack } from './BitPack';
-import * as builder from 'xmlbuilder';
+import builder from 'xmlbuilder';
 import { SimAccessFlags } from '../enums/SimAccessFlags';
 import { ParcelDwellRequestMessage } from './messages/ParcelDwellRequest';
 import type { ParcelDwellReplyMessage } from './messages/ParcelDwellReply';

@@ -25,6 +25,7 @@ VIEWER_STAGING="$ELECTRON_DIR/viewer"
 SKIP_VIEWER_BUILD=false
 SKIP_CONFIGURE=false
 SKIP_UNREAL=false
+NO_FIRESTORM=false
 FORCE_REBUILD=false
 
 OVERRIDE_VERSION=""
@@ -34,6 +35,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  --skip-viewer     Skip building Firestorm (use existing build)"
+    echo "  --no-firestorm    Exclude Firestorm entirely (no build, no staging)"
     echo "  --skip-unreal     Skip Unreal viewer cook/package step"
     echo "  --skip-configure  Skip autobuild configure step (just build)"
     echo "  --force           Force rebuild even if files are up to date"
@@ -49,6 +51,11 @@ show_help() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --skip-viewer)
+            SKIP_VIEWER_BUILD=true
+            shift
+            ;;
+        --no-firestorm)
+            NO_FIRESTORM=true
             SKIP_VIEWER_BUILD=true
             shift
             ;;
@@ -150,8 +157,8 @@ if [ "$SKIP_VIEWER_BUILD" = false ]; then
     echo ""
 fi
 
-# Check if viewer build exists
-if [ ! -f "$VIEWER_BUILD/firestorm-bin.exe" ]; then
+# Check if viewer build exists (skip when Firestorm excluded entirely)
+if [ "$NO_FIRESTORM" = false ] && [ ! -f "$VIEWER_BUILD/firestorm-bin.exe" ]; then
     echo "ERROR: Viewer build not found at $VIEWER_BUILD"
     echo "Run without --skip-viewer to build, or build manually first."
     exit 1
@@ -190,43 +197,48 @@ npm run build:sound-player
 echo ""
 echo "Step 2: Copying viewer to staging area..."
 
-# Check if viewer staging needs update
-NEEDS_STAGING=false
-if [ "$FORCE_REBUILD" = true ]; then
-    NEEDS_STAGING=true
-elif [ ! -f "$VIEWER_STAGING/firestorm-bin.exe" ]; then
-    NEEDS_STAGING=true
-elif [ "$VIEWER_BUILD/firestorm-bin.exe" -nt "$VIEWER_STAGING/firestorm-bin.exe" ]; then
-    NEEDS_STAGING=true
-fi
-
-if [ "$NEEDS_STAGING" = true ]; then
+if [ "$NO_FIRESTORM" = true ]; then
+    echo "  Firestorm excluded (--no-firestorm), skipping viewer staging..."
     rm -rf "$VIEWER_STAGING"
-    mkdir -p "$VIEWER_STAGING"
-
-    # Copy viewer executable and required files
-    echo "  Copying executables and DLLs..."
-    cp "$VIEWER_BUILD"/*.exe "$VIEWER_STAGING/"
-    cp "$VIEWER_BUILD"/*.dll "$VIEWER_STAGING/" 2>/dev/null || true
-
-    # Copy required directories
-    for dir in app_settings character fonts skins llplugin; do
-        if [ -d "$VIEWER_BUILD/$dir" ]; then
-            echo "  Copying $dir/..."
-            cp -r "$VIEWER_BUILD/$dir" "$VIEWER_STAGING/"
-        fi
-    done
-
-    # Copy other required files
-    for file in featuretable.txt gpu_table.txt ca-bundle.crt; do
-        if [ -f "$VIEWER_BUILD/$file" ]; then
-            cp "$VIEWER_BUILD/$file" "$VIEWER_STAGING/"
-        fi
-    done
-
-    echo "  Viewer staging complete: $(du -sh "$VIEWER_STAGING" | cut -f1)"
 else
-    echo "  Viewer staging up to date, skipping..."
+    # Check if viewer staging needs update
+    NEEDS_STAGING=false
+    if [ "$FORCE_REBUILD" = true ]; then
+        NEEDS_STAGING=true
+    elif [ ! -f "$VIEWER_STAGING/firestorm-bin.exe" ]; then
+        NEEDS_STAGING=true
+    elif [ "$VIEWER_BUILD/firestorm-bin.exe" -nt "$VIEWER_STAGING/firestorm-bin.exe" ]; then
+        NEEDS_STAGING=true
+    fi
+
+    if [ "$NEEDS_STAGING" = true ]; then
+        rm -rf "$VIEWER_STAGING"
+        mkdir -p "$VIEWER_STAGING"
+
+        # Copy viewer executable and required files
+        echo "  Copying executables and DLLs..."
+        cp "$VIEWER_BUILD"/*.exe "$VIEWER_STAGING/"
+        cp "$VIEWER_BUILD"/*.dll "$VIEWER_STAGING/" 2>/dev/null || true
+
+        # Copy required directories
+        for dir in app_settings character fonts skins llplugin; do
+            if [ -d "$VIEWER_BUILD/$dir" ]; then
+                echo "  Copying $dir/..."
+                cp -r "$VIEWER_BUILD/$dir" "$VIEWER_STAGING/"
+            fi
+        done
+
+        # Copy other required files
+        for file in featuretable.txt gpu_table.txt ca-bundle.crt; do
+            if [ -f "$VIEWER_BUILD/$file" ]; then
+                cp "$VIEWER_BUILD/$file" "$VIEWER_STAGING/"
+            fi
+        done
+
+        echo "  Viewer staging complete: $(du -sh "$VIEWER_STAGING" | cut -f1)"
+    else
+        echo "  Viewer staging up to date, skipping..."
+    fi
 fi
 
 # Step 3: Stage Godot viewer

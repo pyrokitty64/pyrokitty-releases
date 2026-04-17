@@ -1,9 +1,9 @@
 #include "SLGameMode.h"
 #include "SLPlayerController.h"
-#include "SLSpectatorPawn.h"
+#include "SLAvatarPawn.h"
 
 ASLGameMode::ASLGameMode()
 {
-	DefaultPawnClass = ASLSpectatorPawn::StaticClass();
+	DefaultPawnClass = ASLAvatarPawn::StaticClass();
 	PlayerControllerClass = ASLPlayerController::StaticClass();
 }

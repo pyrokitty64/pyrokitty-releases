@@ -45,11 +45,25 @@ private:
 	/** Log and dispatch a received message by type. */
 	void DispatchMessage(const FString& Type, const TSharedPtr<FJsonObject>& Json);
 
+	/** Check raw message bytes for high-priority type (avatar, self_id, etc). */
+	static bool IsHighPriority(const TCHAR* Str, int32 Len);
+
 	TUniquePtr<IWebSocketServer> Server;
 	INetworkingWebSocket* ClientSocket = nullptr;
 	FTSTicker::FDelegateHandle TickHandle;
 
 	int32 Port = 0;
+
+	// ── Priority message queue ────────────────────────────
+	// Low-priority messages (object_render, etc.) are queued and drained
+	// with a per-frame time budget so avatar updates aren't starved.
+	struct FQueuedMessage
+	{
+		FString Type;
+		TSharedPtr<FJsonObject> Json;
+	};
+	TArray<FQueuedMessage> LowPriorityQueue;
+	static constexpr float MessageBudgetMs = 12.0f;
 
 	// Stored state from Electron
 	FString SelfAvatarId;

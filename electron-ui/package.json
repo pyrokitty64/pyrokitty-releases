@@ -6,9 +6,8 @@
     "scripts": {
         "start": "npm run build && electron .",
         "dev": "npm run build && concurrently --kill-others \"npm run watch:main\" \"npm run watch:renderer\" \"cross-env PK_DEBUG=all electron .\"",
-        "build": "npm run build:metaverse && npm run build:godot && npm run build:main && npm run build:renderer && npm run build:map && npm run build:3d-map && npm run build:gpu-compress && npm run build:sound-player && npm run build:thumbnail-renderer",
+        "build": "npm run build:godot && npm run build:main && npm run build:renderer && npm run build:map && npm run build:3d-map && npm run build:gpu-compress && npm run build:sound-player && npm run build:thumbnail-renderer",
         "build:godot": "cd ../godot-viewer && dotnet build",
-        "build:metaverse": "cd node-metaverse && npm run build",
         "build:voice": "cd voice && dotnet publish -c Release -r win-x64 --self-contained -o ../dist/voice",
         "build:main": "esbuild src/main/index.ts --bundle --outfile=dist/main/index.js --platform=node --target=node18 --format=cjs --external:electron --external:sharp && esbuild src/main/assets/texture-decode-worker.ts --bundle --outfile=dist/main/texture-decode-worker.js --platform=node --target=node18 --format=cjs --external:sharp && esbuild src/main/assets/mesh-convert-worker.ts --bundle --outfile=dist/main/mesh-convert-worker.js --platform=node --target=node18 --format=cjs --external:electron",
         "build:gpu-compress": "esbuild src/gpu-compress/compress.ts --bundle --outfile=dist/gpu-compress/compress.js --platform=browser --target=chrome120 --external:electron && node -e \"const fs=require('fs');fs.copyFileSync('src/gpu-compress/index.html','dist/gpu-compress/index.html');fs.copyFileSync('src/gpu-compress/bc-compress.wgsl','dist/gpu-compress/bc-compress.wgsl');\"",

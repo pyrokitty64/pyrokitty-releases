@@ -1,5 +1,4 @@
-import * as logger from 'winston';
-import * as winston from 'winston';
+import winston from 'winston';
 import moment from 'moment';
 import chalk from 'chalk';
 import type { TransformableInfo } from 'logform';
@@ -45,7 +44,7 @@ const logFormat = winston.format.printf(function(info: TransformableInfo): strin
     return logComponents.join(' ');
 });
 
-logger.configure({
+winston.configure({
     format: logFormat,
     silent: false,
     transports: [
@@ -132,6 +131,6 @@ export class Logger
                 message = JSON.stringify(message);
             }
         }
-        logger.log(type, message);
+        winston.log(type, message);
     }
 }

@@ -30,12 +30,14 @@ public:
 
 	int32 GetObjectCount() const { return Objects.Num(); }
 
+	/** Find the UUID for a given actor, or empty string if not found. */
+	FString FindUuidByActor(const AActor* Actor) const;
+
 private:
 	/** Message handlers */
 	void HandleObjectRender(const TSharedPtr<FJsonObject>& Json);
 	void HandleObjectUpdateBatch(const TSharedPtr<FJsonObject>& Json);
 	void HandleObjectKill(const TSharedPtr<FJsonObject>& Json);
-	void HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json);
 	void HandleTerrainReady(const TSharedPtr<FJsonObject>& Json);
 	void HandleRegionChange();
 
@@ -96,12 +98,6 @@ private:
 
 	/** Delegate handle for message subscription */
 	FDelegateHandle MessageHandle;
-
-	/** Self avatar UUID */
-	FString SelfAvatarId;
-
-	/** Whether we've moved the camera to the avatar yet */
-	bool bCameraPositioned = false;
 
 	// Stats
 	int32 SpawnedCount = 0;

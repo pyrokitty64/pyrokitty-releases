@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as fg from 'fast-glob';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { LLSettings } from './LLSettings';
 import { toDeeplyMatch } from '../../testing/TestingUtils.util.spec';
 
@@ -11,7 +12,7 @@ expect.extend({
 
 describe('LLSettings', () =>
 {
-    const filePath = path.join(__dirname, '..', '..', '..', '..', 'assets');
+    const filePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'assets');
     const filteredFileNames = fg.sync(filePath + '/*.bin');
     for(const file of filteredFileNames)
     {

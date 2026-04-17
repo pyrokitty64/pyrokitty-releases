@@ -12,7 +12,7 @@ import { Message } from '../../enums/Message';
 import type { GroupRoleDataReplyMessage } from '../messages/GroupRoleDataReply';
 import { GroupMember } from '../GroupMember';
 import { FilterResponse } from '../../enums/FilterResponse';
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import { EjectGroupMemberRequestMessage } from '../messages/EjectGroupMemberRequest';
 import { GroupProfileRequestMessage } from '../messages/GroupProfileRequest';
 import type { GroupProfileReplyMessage } from '../messages/GroupProfileReply';

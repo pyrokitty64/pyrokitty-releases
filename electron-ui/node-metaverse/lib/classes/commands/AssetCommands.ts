@@ -1,6 +1,6 @@
 import { CommandsBase } from './CommandsBase';
 import { UUID } from '../UUID';
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import { Utils } from '../Utils';
 import { TransferRequestMessage } from '../messages/TransferRequest';
 import { TransferChannelType } from '../../enums/TransferChannelType';

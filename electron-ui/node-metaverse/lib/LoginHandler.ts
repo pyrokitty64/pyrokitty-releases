@@ -1,5 +1,4 @@
-import * as xmlrpc from 'xmlrpc';
-import * as path from 'path';
+import xmlrpc from 'xmlrpc';
 import { LoginError } from './classes/LoginError';
 import type { LoginParameters } from './classes/LoginParameters';
 import { LoginResponse } from './classes/LoginResponse';
@@ -8,10 +7,8 @@ import { Utils } from './classes/Utils';
 import type { BotOptionFlags } from './enums/BotOptionFlags';
 import { URL } from 'url';
 import * as os from 'os';
+import packageJson from '../../package.json';
 
-const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const packageJson = require(packageJsonPath);
 const version = packageJson.version;
 
 

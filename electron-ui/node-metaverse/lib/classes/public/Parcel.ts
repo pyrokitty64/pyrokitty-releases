@@ -1,6 +1,6 @@
 import type { Vector3 } from '../Vector3';
 import type { UUID } from '../UUID';
-import * as builder from 'xmlbuilder';
+import builder from 'xmlbuilder';
 import { ParcelFlags } from '../../enums/ParcelFlags';
 import type { Region } from '../Region';
 

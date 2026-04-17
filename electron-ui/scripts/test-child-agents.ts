@@ -9,7 +9,7 @@
  *   --wait N: initial wait seconds (default: 15, use higher for no-sweep)
  */
 
-import { Bot, BotOptionFlags, LoginParameters, Vector3 } from '../node-metaverse/dist/lib';
+import { Bot, BotOptionFlags, LoginParameters, Vector3 } from '../node-metaverse/lib';
 import * as fs from 'fs';
 import * as path from 'path';
 

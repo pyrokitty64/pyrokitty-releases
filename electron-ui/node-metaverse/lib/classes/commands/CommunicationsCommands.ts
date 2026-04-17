@@ -1,4 +1,4 @@
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import { AssetType } from '../../enums/AssetType';
 import { ChatType } from '../../enums/ChatType';
 import { FilterResponse } from '../../enums/FilterResponse';

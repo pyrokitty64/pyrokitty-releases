@@ -4,10 +4,10 @@
  * extracts PBR texture UUIDs and factors via LLGLTFMaterialOverride.
  */
 
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { LLGLTFMaterial } from '../../../node-metaverse/dist/lib/classes/LLGLTFMaterial';
-import { LLGLTFMaterialOverride } from '../../../node-metaverse/dist/lib/classes/LLGLTFMaterialOverride';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
+import { LLGLTFMaterial } from '../../../node-metaverse/lib/classes/LLGLTFMaterial';
+import { LLGLTFMaterialOverride } from '../../../node-metaverse/lib/classes/LLGLTFMaterialOverride';
 
 const MAX_CONCURRENT = 8;
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';

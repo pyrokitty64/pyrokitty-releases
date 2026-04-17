@@ -4,9 +4,9 @@
  * Parsed animations are cached to disk as JSON for instant replay on subsequent sessions.
  */
 
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { LLAnimation } from '../../../node-metaverse/dist/lib/classes/LLAnimation';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
+import { LLAnimation } from '../../../node-metaverse/lib/classes/LLAnimation';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';

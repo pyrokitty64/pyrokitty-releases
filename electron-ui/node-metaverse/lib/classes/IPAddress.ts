@@ -1,4 +1,4 @@
-import * as ipaddr from 'ipaddr.js'
+import ipaddr from 'ipaddr.js'
 import type { IPv4, IPv6 } from 'ipaddr.js';
 
 export class IPAddress

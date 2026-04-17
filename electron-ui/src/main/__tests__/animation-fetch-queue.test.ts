@@ -41,14 +41,14 @@ const mockLLAnimationData = vi.hoisted(() => ({
     }],
   },
 }));
-vi.mock('../../../node-metaverse/dist/lib/classes/LLAnimation', () => ({
+vi.mock('../../../node-metaverse/lib/classes/LLAnimation', () => ({
   LLAnimation: function LLAnimation() {
     Object.assign(this, mockLLAnimationData.current);
   },
 }));
 
 // Mock node-metaverse AssetType
-vi.mock('../../../node-metaverse/dist/lib', () => ({
+vi.mock('../../../node-metaverse/lib', () => ({
   AssetType: { Animation: 20 },
 }));
 

@@ -10,7 +10,7 @@ import { IPC_CHANNELS } from '../shared/types';
 import { setMapWindow, getMapWindow } from './ui/map-window';
 import { set3DMapWindow, get3DMapWindow } from './ui/map3d-window';
 import { voiceRegistry } from './voice/voice-registry';
-import { InventoryFolder } from '../../node-metaverse/dist/lib/classes/InventoryFolder';
+import { InventoryFolder } from '../../node-metaverse/lib/classes/InventoryFolder';
 import { initGpuCompressWindow, destroyGpuCompressWindow } from './assets/gpu-compress-window';
 import { initThumbnailWindow, destroyThumbnailWindow } from './assets/thumbnail-window';
 import { getSavedBounds, trackWindow } from './ui/window-state-manager';

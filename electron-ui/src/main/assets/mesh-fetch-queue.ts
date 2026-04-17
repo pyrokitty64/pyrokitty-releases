@@ -3,8 +3,8 @@
  * Max 4 concurrent downloads; shared meshes fetched once.
  */
 
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
 import { isMeshCached, meshCachePath, readMeshMeta } from './mesh-converter';
 import { MeshConvertPool } from './mesh-convert-pool';
 

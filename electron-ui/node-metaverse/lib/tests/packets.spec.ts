@@ -1,6 +1,7 @@
 import 'mocha';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { Packet } from '../classes/Packet';
 import { DecodeFlags } from '../enums/DecodeFlags';
 import { PacketFlags } from '../enums/PacketFlags';
@@ -24,7 +25,7 @@ function compareArrays(arr1: any[], arr2: any[]): boolean
 
 describe('Packets', () =>
 {
-    const p = path.resolve(__dirname + '/../../../testing/packets');
+    const p = path.resolve(path.dirname(fileURLToPath(import.meta.url)) + '/../../../testing/packets');
     const files = fs.readdirSync(p);
     for (const file of files)
     {

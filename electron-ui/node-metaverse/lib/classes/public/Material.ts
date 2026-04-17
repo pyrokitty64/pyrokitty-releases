@@ -1,6 +1,6 @@
 import { UUID } from '../UUID';
 import { Color4 } from '../Color4';
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import { Utils } from '../Utils';
 
 export class Material

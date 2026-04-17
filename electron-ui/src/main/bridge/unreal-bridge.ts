@@ -10,21 +10,21 @@
  *  - Window bounds saved as 'unreal' instead of 'godot'
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import { app } from 'electron';
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { Vector3 } from '../../../node-metaverse/dist/lib/classes/Vector3';
-import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
-import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
-import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
-import { ChatSourceType } from '../../../node-metaverse/dist/lib/enums/ChatSourceType';
-import type { ScriptDialogEvent } from '../../../node-metaverse/dist/lib/events/ScriptDialogEvent';
-import type { LureEvent } from '../../../node-metaverse/dist/lib/events/LureEvent';
+import type { Bot } from '../../../node-metaverse/lib';
+import { Vector3 } from '../../../node-metaverse/lib/classes/Vector3';
+import type { Region } from '../../../node-metaverse/lib/classes/Region';
+import { Message } from '../../../node-metaverse/lib/enums/Message';
+import { ChatType } from '../../../node-metaverse/lib/enums/ChatType';
+import { ChatSourceType } from '../../../node-metaverse/lib/enums/ChatSourceType';
+import type { ScriptDialogEvent } from '../../../node-metaverse/lib/events/ScriptDialogEvent';
+import type { LureEvent } from '../../../node-metaverse/lib/events/LureEvent';
 import type { SceneManager, ViewerAdapter } from '../network/scene-manager';
 import { MeshFetchQueue } from '../assets/mesh-fetch-queue';
 import { initSkeletonData } from '../assets/mesh-converter';
@@ -84,6 +84,47 @@ function getUnrealEditorPath(): string {
 
 function getUnrealProjectFile(): string {
   return path.join(getUnrealProjectRoot(), 'UnrealViewer.uproject');
+}
+
+/** Build the editor DLL if source files are newer than the compiled DLL. */
+function buildUnrealIfNeeded(): void {
+  const projectRoot = getUnrealProjectRoot();
+  const dllPath = path.join(projectRoot, 'Binaries', 'Win64', 'UnrealEditor-UnrealViewer.dll');
+  const srcDir = path.join(projectRoot, 'Source', 'UnrealViewer');
+
+  // Skip if source dir doesn't exist (packaged build)
+  if (!fs.existsSync(srcDir)) return;
+
+  // Check if any source file is newer than the DLL
+  const dllMtime = fs.existsSync(dllPath) ? fs.statSync(dllPath).mtimeMs : 0;
+  const sourceFiles = fs.readdirSync(srcDir).filter(f => f.endsWith('.cpp') || f.endsWith('.h'));
+  const needsBuild = sourceFiles.some(f => {
+    const srcMtime = fs.statSync(path.join(srcDir, f)).mtimeMs;
+    return srcMtime > dllMtime;
+  });
+
+  if (!needsBuild) {
+    console.log('[UnrealBridge] Editor DLL is up-to-date, skipping build');
+    return;
+  }
+
+  const buildBat = path.join('C:', 'Program Files', 'Epic Games', 'UE_5.7', 'Engine', 'Build', 'BatchFiles', 'Build.bat');
+  if (!fs.existsSync(buildBat)) {
+    console.warn('[UnrealBridge] Build.bat not found, skipping auto-build');
+    return;
+  }
+
+  const projectFile = getUnrealProjectFile();
+  console.log('[UnrealBridge] Source files changed — rebuilding editor DLL...');
+  try {
+    execSync(
+      `"${buildBat}" UnrealViewerEditor Win64 Development -Project="${projectFile}" -WaitMutex -MaxParallelActions=4`,
+      { stdio: 'inherit', timeout: 300_000 },
+    );
+    console.log('[UnrealBridge] Editor DLL build succeeded');
+  } catch (err) {
+    console.error('[UnrealBridge] Editor DLL build failed:', err);
+  }
 }
 
 function getCacheDirBase(): string {
@@ -196,6 +237,9 @@ export class UnrealBridge extends EventEmitter {
 
     // Prefer packaged standalone exe; fall back to UnrealEditor -game in dev
     const packagedExe = getPackagedExePath();
+    if (!packagedExe) {
+      buildUnrealIfNeeded();
+    }
     const exePath = packagedExe ?? getUnrealEditorPath();
     const spawnArgs = packagedExe
       ? ['-windowed', '-ResX=1024', '-ResY=768', `-ws-port=${this.port}`]

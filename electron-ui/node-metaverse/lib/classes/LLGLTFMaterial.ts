@@ -1,4 +1,4 @@
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import type { LLGLTFMaterialData } from './LLGLTFMaterialData';
  
 export class LLGLTFMaterial

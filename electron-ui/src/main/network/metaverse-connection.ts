@@ -6,22 +6,22 @@
  */
 
 import { EventEmitter } from 'events';
-import { Bot, BotOptionFlags, LoginParameters, UUID } from '../../../node-metaverse/dist/lib';
+import { Bot, BotOptionFlags, LoginParameters, UUID } from '../../../node-metaverse/lib';
 import { SceneManager } from './scene-manager';
-import { LoginError } from '../../../node-metaverse/dist/lib/classes/LoginError';
-import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
-import { ChatSourceType } from '../../../node-metaverse/dist/lib/enums/ChatSourceType';
-import { InstantMessageEventFlags } from '../../../node-metaverse/dist/lib/enums/InstantMessageEventFlags';
-import { RightsFlags } from '../../../node-metaverse/dist/lib/enums/RightsFlags';
-import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
-import { TextureEntry } from '../../../node-metaverse/dist/lib/classes/TextureEntry';
-import type { AvatarAppearanceMessage } from '../../../node-metaverse/dist/lib/classes/messages/AvatarAppearance';
+import { LoginError } from '../../../node-metaverse/lib/classes/LoginError';
+import { ChatType } from '../../../node-metaverse/lib/enums/ChatType';
+import { ChatSourceType } from '../../../node-metaverse/lib/enums/ChatSourceType';
+import { InstantMessageEventFlags } from '../../../node-metaverse/lib/enums/InstantMessageEventFlags';
+import { RightsFlags } from '../../../node-metaverse/lib/enums/RightsFlags';
+import { Message } from '../../../node-metaverse/lib/enums/Message';
+import { TextureEntry } from '../../../node-metaverse/lib/classes/TextureEntry';
+import type { AvatarAppearanceMessage } from '../../../node-metaverse/lib/classes/messages/AvatarAppearance';
 import { BAKE_CHANNEL_TO_TE_FACE } from '../bridge/godot-bridge-types';
-import { SoundFlags } from '../../../node-metaverse/dist/lib/enums/SoundFlags';
-import type { SoundTriggerMessage } from '../../../node-metaverse/dist/lib/classes/messages/SoundTrigger';
-import type { AttachedSoundMessage } from '../../../node-metaverse/dist/lib/classes/messages/AttachedSound';
-import type { AttachedSoundGainChangeMessage } from '../../../node-metaverse/dist/lib/classes/messages/AttachedSoundGainChange';
-import type { PreloadSoundMessage } from '../../../node-metaverse/dist/lib/classes/messages/PreloadSound';
+import { SoundFlags } from '../../../node-metaverse/lib/enums/SoundFlags';
+import type { SoundTriggerMessage } from '../../../node-metaverse/lib/classes/messages/SoundTrigger';
+import type { AttachedSoundMessage } from '../../../node-metaverse/lib/classes/messages/AttachedSound';
+import type { AttachedSoundGainChangeMessage } from '../../../node-metaverse/lib/classes/messages/AttachedSoundGainChange';
+import type { PreloadSoundMessage } from '../../../node-metaverse/lib/classes/messages/PreloadSound';
 /** Fields we actually read from animation circuit messages (may be missing on truncated packets). */
 type AnimationPacket = { Sender?: { ID?: { toString(): string } }; AnimationList?: { AnimID: { toString(): string }; AnimSequenceID: number }[] };
 import { SoundFetchQueue } from '../assets/sound-fetch-queue';
@@ -1077,7 +1077,7 @@ export class MetaverseConnection extends EventEmitter {
         }
       }
 
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const uuid = new UUID(friendId);
       const nameResult = await this.bot.clientCommands.grid.avatarKey2Name(uuid);
       const friend = this.friends.get(friendId);
@@ -1112,7 +1112,7 @@ export class MetaverseConnection extends EventEmitter {
     if (toResolve.length === 0) return;
 
     try {
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const uuidObjects = toResolve.map(id => new UUID(id));
       const results = await this.bot.clientCommands.grid.getDisplayNames(uuidObjects);
       pkDebug('avatar', `[MetaverseConnection] resolveDisplayNames: got ${results.size} results`);

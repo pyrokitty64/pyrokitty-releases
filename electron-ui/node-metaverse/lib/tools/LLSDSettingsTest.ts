@@ -1,10 +1,11 @@
 import * as fs from 'fs/promises'
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { LLSettings } from '../classes/LLSettings';
 
 async function test(): Promise<void>
 {
-    const settings = await fs.readFile(path.join(__dirname, '..', '..', '..', 'testing', 'water.bin'));
+    const settings = await fs.readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'testing', 'water.bin'));
     const set = new LLSettings(settings.toString('utf-8'));
     console.log(JSON.stringify(set, null, 4));
 

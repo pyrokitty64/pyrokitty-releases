@@ -21,17 +21,17 @@
  * call `.toString()` on UUID objects so our Maps use plain string keys.
  */
 
-import { Bot, BotOptionFlags, LoginParameters, Vector3 } from '../../electron-ui/node-metaverse/dist/lib/index.js';
-import { ChatType } from '../../electron-ui/node-metaverse/dist/lib/enums/ChatType.js';
-import { ChatSourceType } from '../../electron-ui/node-metaverse/dist/lib/enums/ChatSourceType.js';
-import { TeleportEventType } from '../../electron-ui/node-metaverse/dist/lib/enums/TeleportEventType.js';
-import { InstantMessageEventFlags } from '../../electron-ui/node-metaverse/dist/lib/enums/InstantMessageEventFlags.js';
-import { RightsFlags } from '../../electron-ui/node-metaverse/dist/lib/enums/RightsFlags.js';
-import { UUID } from '../../electron-ui/node-metaverse/dist/lib/classes/UUID.js';
-import { Quaternion } from '../../electron-ui/node-metaverse/dist/lib/classes/Quaternion.js';
-import { DeRezDestination } from '../../electron-ui/node-metaverse/dist/lib/enums/DeRezDestination.js';
-import { AssetType } from '../../electron-ui/node-metaverse/dist/lib/enums/AssetType.js';
-import { ControlFlags } from '../../electron-ui/node-metaverse/dist/lib/enums/ControlFlags.js';
+import { Bot, BotOptionFlags, LoginParameters, Vector3 } from '../../electron-ui/node-metaverse/lib/index.js';
+import { ChatType } from '../../electron-ui/node-metaverse/lib/enums/ChatType.js';
+import { ChatSourceType } from '../../electron-ui/node-metaverse/lib/enums/ChatSourceType.js';
+import { TeleportEventType } from '../../electron-ui/node-metaverse/lib/enums/TeleportEventType.js';
+import { InstantMessageEventFlags } from '../../electron-ui/node-metaverse/lib/enums/InstantMessageEventFlags.js';
+import { RightsFlags } from '../../electron-ui/node-metaverse/lib/enums/RightsFlags.js';
+import { UUID } from '../../electron-ui/node-metaverse/lib/classes/UUID.js';
+import { Quaternion } from '../../electron-ui/node-metaverse/lib/classes/Quaternion.js';
+import { DeRezDestination } from '../../electron-ui/node-metaverse/lib/enums/DeRezDestination.js';
+import { AssetType } from '../../electron-ui/node-metaverse/lib/enums/AssetType.js';
+import { ControlFlags } from '../../electron-ui/node-metaverse/lib/enums/ControlFlags.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -910,6 +910,9 @@ export class BotManager {
       position: c.Position
         ? { x: c.Position.x, y: c.Position.y, z: c.Position.z }
         : { x: 0, y: 0, z: 0 },
+      scale: c.Scale
+        ? { x: c.Scale.x, y: c.Scale.y, z: c.Scale.z }
+        : undefined,
     }));
   }
 
@@ -1027,8 +1030,8 @@ export class BotManager {
       const result: any = { ok: true, size: buf?.length ?? 0 };
       if (type === 'material' && buf && buf.length >= 20) {
         try {
-          const { LLGLTFMaterial } = await import('../../electron-ui/node-metaverse/dist/lib/classes/LLGLTFMaterial.js');
-          const { LLGLTFMaterialOverride } = await import('../../electron-ui/node-metaverse/dist/lib/classes/LLGLTFMaterialOverride.js');
+          const { LLGLTFMaterial } = await import('../../electron-ui/node-metaverse/lib/classes/LLGLTFMaterial.js');
+          const { LLGLTFMaterialOverride } = await import('../../electron-ui/node-metaverse/lib/classes/LLGLTFMaterialOverride.js');
           const gltfMat = new LLGLTFMaterial(buf);
           result.rawGltf = gltfMat.data;
           if (gltfMat.data) {
@@ -1059,10 +1062,10 @@ export class BotManager {
     await this.ensureConnected();
     const lines: string[] = [];
     try {
-      const { UUID } = await import('../../electron-ui/node-metaverse/dist/lib/classes/UUID.js');
-      const { AttachmentPoint } = await import('../../electron-ui/node-metaverse/dist/lib/enums/AttachmentPoint.js');
-      const { AssetType } = await import('../../electron-ui/node-metaverse/dist/lib/enums/AssetType.js');
-      const { SculptType } = await import('../../electron-ui/node-metaverse/dist/lib/enums/SculptType.js');
+      const { UUID } = await import('../../electron-ui/node-metaverse/lib/classes/UUID.js');
+      const { AttachmentPoint } = await import('../../electron-ui/node-metaverse/lib/enums/AttachmentPoint.js');
+      const { AssetType } = await import('../../electron-ui/node-metaverse/lib/enums/AssetType.js');
+      const { SculptType } = await import('../../electron-ui/node-metaverse/lib/enums/SculptType.js');
 
       // Fetch the inventory item
       const item = await this.bot!.agent.inventory.fetchInventoryItem(new UUID(itemId));
@@ -1135,8 +1138,8 @@ export class BotManager {
         const meshUuid = md.meshData?.toString();
         if (meshUuid) {
           try {
-            const { LLMesh } = await import('../../electron-ui/node-metaverse/dist/lib/classes/public/LLMesh.js');
-            const { llMeshToGlb, initSkeletonData } = await import('../../electron-ui/dist/main/index.js').catch(() => ({ llMeshToGlb: null, initSkeletonData: null }));
+            const { LLMesh } = await import('../../electron-ui/node-metaverse/lib/classes/public/LLMesh.js');
+            const { llMeshToGlb, initSkeletonData } = await import('../../electron-ui/src/main/assets/mesh-converter.js').catch(() => ({ llMeshToGlb: null, initSkeletonData: null }));
 
             const meshBuf = await this.bot!.clientCommands.asset.downloadAsset(AssetType.Mesh, meshUuid);
             lines.push(`\nMesh downloaded: ${meshBuf.length} bytes`);
@@ -1178,7 +1181,7 @@ export class BotManager {
   async testInventoryObjectDownload(itemId: string): Promise<string> {
     await this.ensureConnected();
     try {
-      const { UUID } = await import('../../electron-ui/node-metaverse/dist/lib/classes/UUID.js');
+      const { UUID } = await import('../../electron-ui/node-metaverse/lib/classes/UUID.js');
       const buf = await this.bot!.clientCommands.asset.downloadInventoryAsset(
         new UUID(itemId),
         this.bot!.agent.agentID,
@@ -1452,7 +1455,7 @@ export class BotManager {
         // Cache baked texture UUIDs from TextureEntry
         if (msg.ObjectData?.TextureEntry) {
           try {
-            const { TextureEntry } = await import('../../electron-ui/node-metaverse/dist/lib/classes/TextureEntry.js');
+            const { TextureEntry } = await import('../../electron-ui/node-metaverse/lib/classes/TextureEntry.js');
             const te = TextureEntry.from(msg.ObjectData.TextureEntry);
             // Bake channel face indices: HEAD=8, UPPER=9, LOWER=10, EYES=11, SKIRT=20, HAIR=21, LEFTARM=40..AUX3=44
             const BAKE_FACES = [8, 9, 10, 11, 20, 21, 40, 41, 42, 43, 44];

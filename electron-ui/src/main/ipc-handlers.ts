@@ -6,7 +6,7 @@ import { accountManager } from './network/account-manager';
 import { viewerManager } from './network/viewer-manager';
 import { connectionManager } from './network/viewer-connection';
 import { metaverseConnectionManager } from './network/metaverse-connection';
-import { Vector3, FolderType, AssetType, UUID as NMUUID } from '../../node-metaverse/dist/lib';
+import { Vector3, FolderType, AssetType, UUID as NMUUID } from '../../node-metaverse/lib';
 import { chatLogManager } from './ui/chat-log-manager';
 // InventorySyncManager replaced by InventoryWalker
 import { voiceRegistry } from './voice/voice-registry';

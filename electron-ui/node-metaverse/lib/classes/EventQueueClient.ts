@@ -20,7 +20,7 @@ import { InventoryLibrary } from '../enums/InventoryLibrary';
 import { LandStatsEvent } from '../events/LandStatsEvent';
 import { AgentGroupDataUpdateEvent, GroupData } from '../events/AgentGroupDataUpdateEvent';
 
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import type { CancelableRequest, Response as GotResponse } from 'got';
 import got from 'got';
 import Long from 'long';

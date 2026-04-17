@@ -107,6 +107,17 @@ export const AccountList: React.FC<AccountListProps> = ({
                 {isMetaverseOnly && instance && selectedAccountId === account.id && (
                   <div className="account-viewer-buttons">
                     <button
+                      className="account-launch-btn account-launch-unreal"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchUnrealViewer(instance.id);
+                      }}
+                      disabled={!canLaunchViewer}
+                      title="Launch Unreal Engine 5 viewer"
+                    >
+                      {instance.unrealBridgeActive ? 'Stop Unreal' : 'Unreal'}
+                    </button>
+                    <button
                       className="account-launch-btn account-launch-godot"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -126,17 +137,6 @@ export const AccountList: React.FC<AccountListProps> = ({
                       title="Launch Godot viewer in VR mode (requires OpenXR headset)"
                     >
                       Godot VR
-                    </button>
-                    <button
-                      className="account-launch-btn account-launch-unreal"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onLaunchUnrealViewer(instance.id);
-                      }}
-                      disabled={!canLaunchViewer}
-                      title="Launch Unreal Engine 5 viewer"
-                    >
-                      {instance.unrealBridgeActive ? 'Stop Unreal' : 'Unreal'}
                     </button>
                   </div>
                 )}

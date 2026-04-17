@@ -1,10 +1,10 @@
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 
 /** Epsilon for "is this position basically zero?" — covers float drift from quaternion rotation */
 const NEAR_ZERO = 0.001;
 
 import type * as Long from 'long';
-import * as micromatch from 'micromatch';
+import micromatch from 'micromatch';
 import type { Subscription } from 'rxjs';
 import { SculptType } from '../../enums/SculptType';
 import { FilterResponse } from '../../enums/FilterResponse';

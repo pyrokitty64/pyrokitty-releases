@@ -12,8 +12,8 @@
  * convert ResolvedMaterial → their native format.
  */
 
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { Material } from '../../../node-metaverse/dist/lib/classes/public/Material';
+import type { Bot } from '../../../node-metaverse/lib';
+import { Material } from '../../../node-metaverse/lib/classes/public/Material';
 import type { MaterialOverrideData, TextureTransform } from '../assets/material-fetch-queue';
 import type { MaterialFetchQueue } from '../assets/material-fetch-queue';
 import type { TextureFetchQueue } from '../assets/texture-fetch-queue';

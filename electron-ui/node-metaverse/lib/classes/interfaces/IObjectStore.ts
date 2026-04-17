@@ -12,7 +12,7 @@ export interface IObjectStore
     getObjectsByParent: (parentID: number) => GameObject[];
     shutdown: () => void;
     getObjectsInArea: (minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number) => GameObject[];
-    getObjectByUUID: (fullID: UUID) => GameObject;
+    getObjectByUUID: (fullID: UUID | string) => GameObject;
     getObjectByLocalID: (ID: number) => GameObject;
     getNumberOfObjects: () => number;
     getAllObjects: (options: GetObjectsOptions) => GameObject[];

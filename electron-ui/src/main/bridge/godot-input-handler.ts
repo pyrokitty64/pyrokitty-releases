@@ -2,18 +2,18 @@
  * Handles input from Godot (movement, object interaction).
  */
 
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { ControlFlags, PacketFlags } from '../../../node-metaverse/dist/lib';
-import { ObjectSelectMessage } from '../../../node-metaverse/dist/lib/classes/messages/ObjectSelect';
-import { ObjectDeselectMessage } from '../../../node-metaverse/dist/lib/classes/messages/ObjectDeselect';
-import { SetAlwaysRunMessage } from '../../../node-metaverse/dist/lib/classes/messages/SetAlwaysRun';
-import { RequestPayPriceMessage } from '../../../node-metaverse/dist/lib/classes/messages/RequestPayPrice';
-import type { PayPriceReplyMessage } from '../../../node-metaverse/dist/lib/classes/messages/PayPriceReply';
-import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
-import { ChatType } from '../../../node-metaverse/dist/lib/enums/ChatType';
-import { FilterResponse } from '../../../node-metaverse/dist/lib/enums/FilterResponse';
-import type { ScriptDialogEvent } from '../../../node-metaverse/dist/lib/events/ScriptDialogEvent';
-import type { LureEvent } from '../../../node-metaverse/dist/lib/events/LureEvent';
+import type { Bot } from '../../../node-metaverse/lib';
+import { ControlFlags, PacketFlags } from '../../../node-metaverse/lib';
+import { ObjectSelectMessage } from '../../../node-metaverse/lib/classes/messages/ObjectSelect';
+import { ObjectDeselectMessage } from '../../../node-metaverse/lib/classes/messages/ObjectDeselect';
+import { SetAlwaysRunMessage } from '../../../node-metaverse/lib/classes/messages/SetAlwaysRun';
+import { RequestPayPriceMessage } from '../../../node-metaverse/lib/classes/messages/RequestPayPrice';
+import type { PayPriceReplyMessage } from '../../../node-metaverse/lib/classes/messages/PayPriceReply';
+import { Message } from '../../../node-metaverse/lib/enums/Message';
+import { ChatType } from '../../../node-metaverse/lib/enums/ChatType';
+import { FilterResponse } from '../../../node-metaverse/lib/enums/FilterResponse';
+import type { ScriptDialogEvent } from '../../../node-metaverse/lib/events/ScriptDialogEvent';
+import type { LureEvent } from '../../../node-metaverse/lib/events/LureEvent';
 import type { SendFn } from './godot-bridge-types';
 import { pkDebug } from '../pk-debug';
 
@@ -176,7 +176,7 @@ export class GodotInputHandler {
     try {
       const region = this.bot.currentRegion;
       if (!region) return;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(uuid));
       if (!obj) {
         this.send({ type: 'object_properties', uuid, name: '', description: '' });
@@ -222,7 +222,7 @@ export class GodotInputHandler {
 
   async handleSetObjectName(uuid: string, name: string): Promise<void> {
     try {
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = this.bot.currentRegion?.objects?.getObjectByUUID(new UUID(uuid));
       if (!obj) {
         console.warn(`[GodotBridge] set_object_name: object ${uuid} not found`);
@@ -237,7 +237,7 @@ export class GodotInputHandler {
 
   async handleSetObjectDescription(uuid: string, description: string): Promise<void> {
     try {
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = this.bot.currentRegion?.objects?.getObjectByUUID(new UUID(uuid));
       if (!obj) {
         console.warn(`[GodotBridge] set_object_description: object ${uuid} not found`);
@@ -300,7 +300,7 @@ export class GodotInputHandler {
       const region = this.bot.currentRegion;
       if (!region) return;
       const objectUuid: string = msg.uuid;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(objectUuid));
       if (!obj) {
         console.warn(`[GodotBridge] object_pay: object ${objectUuid} not found`);
@@ -342,7 +342,7 @@ export class GodotInputHandler {
         console.warn(`[GodotBridge] pay_confirm: invalid amount ${amount}`);
         return;
       }
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(objectUuid));
       if (!obj) {
         console.warn(`[GodotBridge] pay_confirm: object ${objectUuid} not found`);
@@ -362,8 +362,8 @@ export class GodotInputHandler {
       const region = this.bot.currentRegion;
       if (!region) return;
       const objectUuid: string = msg.uuid;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
-      const { Vector3 } = await import('../../../node-metaverse/dist/lib/classes/Vector3');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
+      const { Vector3 } = await import('../../../node-metaverse/lib/classes/Vector3');
       const obj = region.objects?.getObjectByUUID(new UUID(objectUuid));
       if (!obj) {
         console.warn(`[GodotBridge] object_sit: object ${objectUuid} not found`);
@@ -388,7 +388,7 @@ export class GodotInputHandler {
       const region = this.bot.currentRegion;
       if (!region) return;
       const objectUuid: string = msg.uuid;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(objectUuid));
       if (!obj) {
         console.warn(`[GodotBridge] object_touch: object ${objectUuid} not found`);
@@ -399,7 +399,7 @@ export class GodotInputHandler {
 
       // If the object's default action is SIT and we're not already sitting on it, sit.
       if (obj.ClickAction === CLICK_ACTION_SIT && this._sittingOnLocalId !== localId) {
-        const { Vector3 } = await import('../../../node-metaverse/dist/lib/classes/Vector3');
+        const { Vector3 } = await import('../../../node-metaverse/lib/classes/Vector3');
         const targetUuid = new UUID(obj.FullID.toString());
         await this.bot.clientCommands.movement.sitOnObject(targetUuid, Vector3.getZero());
         this._sittingOnLocalId = localId;
@@ -421,13 +421,13 @@ export class GodotInputHandler {
       const region = this.bot.currentRegion;
       if (!region) return;
       const objectUuid: string = msg.uuid;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(objectUuid));
       if (!obj) return;
 
       // SIT override
       if (obj.ClickAction === CLICK_ACTION_SIT && this._sittingOnLocalId !== obj.ID) {
-        const { Vector3 } = await import('../../../node-metaverse/dist/lib/classes/Vector3');
+        const { Vector3 } = await import('../../../node-metaverse/lib/classes/Vector3');
         await this.bot.clientCommands.movement.sitOnObject(new UUID(obj.FullID.toString()), Vector3.getZero());
         this._sittingOnLocalId = obj.ID;
         pkDebug('input', `[GodotBridge] Sat on object ${objectUuid.slice(0, 8)} (ClickAction=Sit)`);
@@ -447,7 +447,7 @@ export class GodotInputHandler {
     try {
       const region = this.bot.currentRegion;
       if (!region) return;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(msg.uuid));
       if (!obj) return;
 
@@ -465,7 +465,7 @@ export class GodotInputHandler {
     try {
       const region = this.bot.currentRegion;
       if (!region) return;
-      const { UUID } = await import('../../../node-metaverse/dist/lib/classes/UUID');
+      const { UUID } = await import('../../../node-metaverse/lib/classes/UUID');
       const obj = region.objects?.getObjectByUUID(new UUID(msg.uuid));
       if (!obj) return;
 

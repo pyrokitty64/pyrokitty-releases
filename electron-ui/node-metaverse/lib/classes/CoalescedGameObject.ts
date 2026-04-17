@@ -1,7 +1,7 @@
 import { Vector3 } from './Vector3';
 import { GameObject } from './public/GameObject';
 import type { UUID } from './UUID';
-import * as builder from 'xmlbuilder';
+import builder from 'xmlbuilder';
 import type { XMLElement } from 'xmlbuilder';
 import { Utils } from './Utils';
 

@@ -3,21 +3,21 @@
 #include "glTFRuntimeFunctionLibrary.h"
 #include "Misc/Paths.h"
 
-UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPath)
+// ─── Asset parsing (cached) ───────────────────────────────
+
+UglTFRuntimeAsset* USLGlbLoader::EnsureAsset(const FString& MeshId, const FString& GlbPath)
 {
-	// Check cache first
-	if (TObjectPtr<UStaticMesh>* Found = MeshCache.Find(MeshId))
+	// Return cached asset
+	if (TObjectPtr<UglTFRuntimeAsset>* Found = AssetCache.Find(MeshId))
 	{
 		return *Found;
 	}
 
-	// Don't retry known failures
 	if (FailedMeshes.Contains(MeshId))
 	{
 		return nullptr;
 	}
 
-	// Verify file exists
 	if (!FPaths::FileExists(GlbPath))
 	{
 		UE_LOG(LogSLViewer, Warning, TEXT("[GlbLoader] File not found: %s (meshId=%s)"), *GlbPath, *MeshId.Left(8));
@@ -25,17 +25,9 @@ UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPat
 		return nullptr;
 	}
 
-	// Load GLB via glTFRuntime
-	// SceneScale=100 (default): converts GLB vertices from meters to centimeters.
-	// Our Position() also multiplies by 100, but that's for positions not mesh vertices.
-	// Scale is axis-swap only — glTFRuntime makes the mesh 1m at scale=1.
 	FglTFRuntimeConfig LoaderConfig;
-
 	UglTFRuntimeAsset* Asset = UglTFRuntimeFunctionLibrary::glTFLoadAssetFromFilename(
-		GlbPath,
-		false, // not relative to Content
-		LoaderConfig
-	);
+		GlbPath, false, LoaderConfig);
 
 	if (!Asset)
 	{
@@ -44,24 +36,38 @@ UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPat
 		return nullptr;
 	}
 
-	// Keep the asset alive (UStaticMesh references data owned by it)
-	AssetCache.Add(MeshId, Asset);
-
-	// Load first mesh — use embedded materials from the GLB for now
-	FglTFRuntimeStaticMeshConfig MeshConfig;
-
-	const int32 NumMeshes = Asset->GetNumMeshes();
-	if (NumMeshes <= 0)
+	if (Asset->GetNumMeshes() <= 0)
 	{
 		UE_LOG(LogSLViewer, Warning, TEXT("[GlbLoader] GLB has no meshes: %s (meshId=%s)"), *GlbPath, *MeshId.Left(8));
 		FailedMeshes.Add(MeshId);
 		return nullptr;
 	}
 
+	AssetCache.Add(MeshId, Asset);
+	return Asset;
+}
+
+// ─── Visual mesh (cached, no complex collision) ───────────
+
+UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPath)
+{
+	if (TObjectPtr<UStaticMesh>* Found = MeshCache.Find(MeshId))
+	{
+		return *Found;
+	}
+
+	UglTFRuntimeAsset* Asset = EnsureAsset(MeshId, GlbPath);
+	if (!Asset)
+	{
+		return nullptr;
+	}
+
+	FglTFRuntimeStaticMeshConfig MeshConfig;
+	MeshConfig.bAllowCPUAccess = true; // CPU-side vertex data needed for per-triangle line trace picking
 	UStaticMesh* Mesh = Asset->LoadStaticMesh(0, MeshConfig);
 	if (!Mesh)
 	{
-		UE_LOG(LogSLViewer, Warning, TEXT("[GlbLoader] Failed to load static mesh 0: %s (meshId=%s)"), *GlbPath, *MeshId.Left(8));
+		UE_LOG(LogSLViewer, Warning, TEXT("[GlbLoader] Failed to load static mesh 0: meshId=%s"), *MeshId.Left(8));
 		FailedMeshes.Add(MeshId);
 		return nullptr;
 	}
@@ -70,12 +76,42 @@ UStaticMesh* USLGlbLoader::LoadMesh(const FString& MeshId, const FString& GlbPat
 
 	if (MeshCache.Num() <= 10 || (MeshCache.Num() % 100 == 0))
 	{
-		UE_LOG(LogSLViewer, Log, TEXT("[GlbLoader] Loaded mesh #%d: meshId=%s (%d meshes in GLB)"),
-			MeshCache.Num(), *MeshId.Left(8), NumMeshes);
+		UE_LOG(LogSLViewer, Log, TEXT("[GlbLoader] Loaded mesh #%d: meshId=%s"),
+			MeshCache.Num(), *MeshId.Left(8));
 	}
 
 	return Mesh;
 }
+
+// ─── Mesh with per-triangle collision (not cached) ────────
+
+UStaticMesh* USLGlbLoader::LoadMeshWithCollision(const FString& MeshId, const FString& GlbPath, UStaticMeshComponent* MeshComponent)
+{
+	UglTFRuntimeAsset* Asset = EnsureAsset(MeshId, GlbPath);
+	if (!Asset)
+	{
+		return nullptr;
+	}
+
+	FglTFRuntimeStaticMeshConfig MeshConfig;
+	MeshConfig.bAllowCPUAccess = true;
+	MeshConfig.CollisionComplexity = ECollisionTraceFlag::CTF_UseComplexAsSimple;
+	MeshConfig.Outer = MeshComponent;
+	// Skip glTFRuntime's internal cache — we need a fresh mesh per component
+	// because the collision is cooked with this specific component as Outer.
+	MeshConfig.CacheMode = EglTFRuntimeCacheMode::None;
+
+	UStaticMesh* Mesh = Asset->LoadStaticMesh(0, MeshConfig);
+	if (!Mesh)
+	{
+		UE_LOG(LogSLViewer, Warning, TEXT("[GlbLoader] Failed to load collision mesh: meshId=%s"), *MeshId.Left(8));
+		return nullptr;
+	}
+
+	return Mesh;
+}
+
+// ─── Cache query ──────────────────────────────────────────
 
 UStaticMesh* USLGlbLoader::GetCachedMesh(const FString& MeshId) const
 {

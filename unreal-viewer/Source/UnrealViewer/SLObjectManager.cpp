@@ -8,7 +8,6 @@
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/GameInstance.h"
-#include "Kismet/GameplayStatics.h"
 
 // ─── Helper: extract raw Godot-space vectors from JSON (no Unreal conversion) ───
 
@@ -88,21 +87,12 @@ void USLObjectManager::Initialize(FSubsystemCollectionBase& Collection)
 			{
 				HandleObjectKill(Json);
 			}
-			else if (Type == TEXT("self_id"))
-			{
-				Json->TryGetStringField(TEXT("id"), SelfAvatarId);
-			}
-			else if (Type == TEXT("avatar_create") || Type == TEXT("avatar_update") || Type == TEXT("avatar_update_batch"))
-			{
-				HandleAvatarUpdate(Json);
-			}
 			else if (Type == TEXT("terrain_ready"))
 			{
 				HandleTerrainReady(Json);
 			}
 			else if (Type == TEXT("region_change"))
 			{
-				bCameraPositioned = false;
 				HandleRegionChange();
 			}
 		}
@@ -253,6 +243,8 @@ void USLObjectManager::HandleObjectRender(const TSharedPtr<FJsonObject>& Json)
 	Json->TryGetStringField(TEXT("meshId"), MeshId);
 	if (MeshId.IsEmpty()) MeshId = MeshPath;
 
+	// Just verify the asset can be parsed (cached); actual mesh with collision
+	// is created per-component in SpawnObjectActor via LoadMeshWithCollision.
 	UStaticMesh* Mesh = GlbLoader->LoadMesh(MeshId, MeshPath);
 	if (!Mesh)
 	{
@@ -328,6 +320,12 @@ AActor* USLObjectManager::SpawnObjectActor(const FString& Uuid, UStaticMesh* Mes
 	UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(Actor, TEXT("Mesh"));
 	MeshComp->SetStaticMesh(Mesh);
 	MeshComp->SetMobility(EComponentMobility::Movable);
+
+	// Enable query-only collision for click picking (per-triangle line traces)
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
 	Actor->SetRootComponent(MeshComp);
 	MeshComp->RegisterComponent();
 	Actor->SetActorTransform(Transform);
@@ -505,71 +503,6 @@ void USLObjectManager::HandleObjectUpdateBatch(const TSharedPtr<FJsonObject>& Js
 	}
 }
 
-// ─── Avatar camera ──────────────────────────────────────
-
-void USLObjectManager::HandleAvatarUpdate(const TSharedPtr<FJsonObject>& Json)
-{
-	if (bCameraPositioned || SelfAvatarId.IsEmpty())
-	{
-		return;
-	}
-
-	FString AvatarId;
-	FVector GodotPos = FVector::ZeroVector;
-
-	if (Json->HasField(TEXT("avatars")))
-	{
-		const TArray<TSharedPtr<FJsonValue>>* Avatars;
-		if (Json->TryGetArrayField(TEXT("avatars"), Avatars))
-		{
-			for (const auto& Entry : *Avatars)
-			{
-				const TSharedPtr<FJsonObject>* AvatarObj;
-				if (Entry->TryGetObject(AvatarObj))
-				{
-					FString Id;
-					if ((*AvatarObj)->TryGetStringField(TEXT("id"), Id) && Id == SelfAvatarId)
-					{
-						GodotPos = GodotPosFromJson(*AvatarObj);
-						AvatarId = Id;
-						break;
-					}
-				}
-			}
-		}
-	}
-	else
-	{
-		Json->TryGetStringField(TEXT("id"), AvatarId);
-		if (AvatarId == SelfAvatarId)
-		{
-			GodotPos = GodotPosFromJson(Json);
-		}
-	}
-
-	if (AvatarId != SelfAvatarId || GodotPos.IsNearlyZero())
-	{
-		return;
-	}
-
-	// Avatar position is region-local in Godot space — same coordinate system as root prims
-	const FVector UnrealPos = SLCoord::Position(GodotPos.X, GodotPos.Y, GodotPos.Z);
-
-	UWorld* World = GetGameInstance()->GetWorld();
-	if (!World) return;
-
-	APawn* Pawn = UGameplayStatics::GetPlayerPawn(World, 0);
-	if (Pawn)
-	{
-		// 3m above avatar
-		const FVector CameraPos = UnrealPos + FVector(0, 0, 300.0f);
-		Pawn->SetActorLocation(CameraPos);
-		bCameraPositioned = true;
-		UE_LOG(LogSLViewer, Log, TEXT("[ObjectManager] Camera at avatar: godot=(%.1f, %.1f, %.1f) unreal=(%.0f, %.0f, %.0f)"),
-			GodotPos.X, GodotPos.Y, GodotPos.Z, CameraPos.X, CameraPos.Y, CameraPos.Z);
-	}
-}
-
 // ─── Kill / clear ───────────────────────────────────────
 
 void USLObjectManager::HandleObjectKill(const TSharedPtr<FJsonObject>& Json)
@@ -624,4 +557,14 @@ void USLObjectManager::ClearAll()
 	GodotRotations.Empty();
 	ObjectRegionOffset.Empty();
 	RegionOffsets.Empty();
+}
+
+FString USLObjectManager::FindUuidByActor(const AActor* Actor) const
+{
+	if (!Actor) return FString();
+	for (const auto& [Uuid, ObjActor] : Objects)
+	{
+		if (ObjActor == Actor) return Uuid;
+	}
+	return FString();
 }

@@ -5,10 +5,10 @@
  * All avatar and object identity uses UUID strings (not numeric localIds).
  */
 
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { Message } from '../../../node-metaverse/dist/lib/enums/Message';
-import { TextureEntry } from '../../../node-metaverse/dist/lib/classes/TextureEntry';
-import type { AvatarAppearanceMessage } from '../../../node-metaverse/dist/lib/classes/messages/AvatarAppearance';
+import type { Bot } from '../../../node-metaverse/lib';
+import { Message } from '../../../node-metaverse/lib/enums/Message';
+import { TextureEntry } from '../../../node-metaverse/lib/classes/TextureEntry';
+import type { AvatarAppearanceMessage } from '../../../node-metaverse/lib/classes/messages/AvatarAppearance';
 import type { Subscription } from 'rxjs';
 import type { GodotObjectSender } from './godot-object-sender';
 import type { GodotAnimationManager } from './godot-animation-manager';

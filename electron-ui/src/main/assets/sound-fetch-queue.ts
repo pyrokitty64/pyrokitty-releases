@@ -6,8 +6,8 @@
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AssetType } from '../../../node-metaverse/dist/lib';
-import type { Bot } from '../../../node-metaverse/dist/lib';
+import { AssetType } from '../../../node-metaverse/lib';
+import type { Bot } from '../../../node-metaverse/lib';
 
 const MAX_CONCURRENT = 4;
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';

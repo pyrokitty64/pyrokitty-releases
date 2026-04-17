@@ -73,6 +73,27 @@ bool USLWebSocketServer::Tick(float DeltaTime)
 	{
 		ClientSocket->Tick();
 	}
+
+	// Drain low-priority queue with time budget
+	if (LowPriorityQueue.Num() > 0)
+	{
+		const double StartMs = FPlatformTime::Seconds() * 1000.0;
+		while (LowPriorityQueue.Num() > 0)
+		{
+			const double ElapsedMs = FPlatformTime::Seconds() * 1000.0 - StartMs;
+			if (ElapsedMs >= MessageBudgetMs)
+			{
+				break;
+			}
+
+			FQueuedMessage Msg = MoveTemp(LowPriorityQueue[0]);
+			LowPriorityQueue.RemoveAt(0, EAllowShrinking::No);
+
+			DispatchMessage(Msg.Type, Msg.Json);
+			OnJsonMessage.Broadcast(Msg.Type, Msg.Json);
+		}
+	}
+
 	return true;
 }
 
@@ -102,11 +123,14 @@ void USLWebSocketServer::OnDataReceived(void* Data, int32 DataSize)
 {
 	if (DataSize <= 0) return;
 
-	// Convert raw UTF-8 bytes to FString — must use explicit converter to
-	// ensure the temporary outlives FString construction (UTF8_TO_TCHAR is
-	// a stack macro that can dangle with large buffers).
+	// Convert raw UTF-8 bytes to FString
 	const FUTF8ToTCHAR Converter(static_cast<const ANSICHAR*>(Data), DataSize);
 	const FString JsonStr(Converter.Length(), Converter.Get());
+
+	MessagesReceived++;
+
+	// Fast priority check on raw string before parsing (matching Godot's _is_high_priority)
+	const bool bHighPriority = IsHighPriority(*JsonStr, FMath::Min(JsonStr.Len(), 50));
 
 	// Parse JSON
 	TSharedPtr<FJsonObject> JsonObj;
@@ -117,14 +141,40 @@ void USLWebSocketServer::OnDataReceived(void* Data, int32 DataSize)
 		return;
 	}
 
-	MessagesReceived++;
-
 	FString Type;
-	if (JsonObj->TryGetStringField(TEXT("type"), Type))
+	if (!JsonObj->TryGetStringField(TEXT("type"), Type))
 	{
+		return;
+	}
+
+	if (bHighPriority)
+	{
+		// Avatar updates, self_id, etc. — dispatch immediately
 		DispatchMessage(Type, JsonObj);
 		OnJsonMessage.Broadcast(Type, JsonObj);
 	}
+	else
+	{
+		// object_render, terrain, etc. — queue for time-budgeted processing
+		LowPriorityQueue.Add({ MoveTemp(Type), MoveTemp(JsonObj) });
+	}
+}
+
+bool USLWebSocketServer::IsHighPriority(const TCHAR* Str, int32 Len)
+{
+	// Peek at first ~50 chars for high-priority type prefixes.
+	// Matches Godot's _is_high_priority: avatar_*, self_id, sitting_state,
+	// electron_stats, pay_*, script_dialog, object_chat, teleport_*
+	FString Prefix(Len, Str);
+	return Prefix.Contains(TEXT("\"avatar_"))
+		|| Prefix.Contains(TEXT("\"self_id\""))
+		|| Prefix.Contains(TEXT("\"sitting_state\""))
+		|| Prefix.Contains(TEXT("\"electron_stats\""))
+		|| Prefix.Contains(TEXT("\"pay_"))
+		|| Prefix.Contains(TEXT("\"script_dialog\""))
+		|| Prefix.Contains(TEXT("\"object_chat\""))
+		|| Prefix.Contains(TEXT("\"teleport_"))
+		|| Prefix.Contains(TEXT("\"region_change\""));
 }
 
 void USLWebSocketServer::OnSocketClosed()

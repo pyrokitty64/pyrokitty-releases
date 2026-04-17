@@ -3,8 +3,8 @@
  * children, sweeps, and deferred texture promotion.
  */
 
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import { SculptType } from '../../../node-metaverse/dist/lib';
+import type { Bot } from '../../../node-metaverse/lib';
+import { SculptType } from '../../../node-metaverse/lib';
 import type { Subscription } from 'rxjs';
 import { sculptMeshId } from '../assets/sculpt-converter';
 import type { MeshFetchQueue } from '../assets/mesh-fetch-queue';

@@ -13,17 +13,17 @@
  */
 
 import type { Subscription } from 'rxjs';
-import type { Bot } from '../../../node-metaverse/dist/lib';
-import type { Region } from '../../../node-metaverse/dist/lib/classes/Region';
-import type { NewObjectEvent } from '../../../node-metaverse/dist/lib/events/NewObjectEvent';
-import type { ObjectUpdatedEvent } from '../../../node-metaverse/dist/lib/events/ObjectUpdatedEvent';
-import type { ObjectResolvedEvent } from '../../../node-metaverse/dist/lib/events/ObjectResolvedEvent';
-import type { SelectedObjectEvent } from '../../../node-metaverse/dist/lib/events/SelectedObjectEvent';
-import type { TerrainCompleteEvent } from '../../../node-metaverse/dist/lib/events/TerrainCompleteEvent';
-import type { ParcelOverlayCompleteEvent } from '../../../node-metaverse/dist/lib/events/ParcelOverlayCompleteEvent';
-import type { RegionEnvironmentEvent } from '../../../node-metaverse/dist/lib/events/RegionEnvironmentEvent';
-import type { Avatar } from '../../../node-metaverse/dist/lib/classes/public/Avatar';
-import { TeleportEventType } from '../../../node-metaverse/dist/lib/enums/TeleportEventType';
+import type { Bot } from '../../../node-metaverse/lib';
+import type { Region } from '../../../node-metaverse/lib/classes/Region';
+import type { NewObjectEvent } from '../../../node-metaverse/lib/events/NewObjectEvent';
+import type { ObjectUpdatedEvent } from '../../../node-metaverse/lib/events/ObjectUpdatedEvent';
+import type { ObjectResolvedEvent } from '../../../node-metaverse/lib/events/ObjectResolvedEvent';
+import type { SelectedObjectEvent } from '../../../node-metaverse/lib/events/SelectedObjectEvent';
+import type { TerrainCompleteEvent } from '../../../node-metaverse/lib/events/TerrainCompleteEvent';
+import type { ParcelOverlayCompleteEvent } from '../../../node-metaverse/lib/events/ParcelOverlayCompleteEvent';
+import type { RegionEnvironmentEvent } from '../../../node-metaverse/lib/events/RegionEnvironmentEvent';
+import type { Avatar } from '../../../node-metaverse/lib/classes/public/Avatar';
+import { TeleportEventType } from '../../../node-metaverse/lib/enums/TeleportEventType';
 /** Legacy vegetation PCodes — not supported, skip entirely */
 const VEGETATION_PCODES = new Set([95, 111, 255]); // Grass, NewTree, Tree
 function isVegetation(obj: any): boolean {

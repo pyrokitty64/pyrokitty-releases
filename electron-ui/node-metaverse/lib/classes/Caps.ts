@@ -6,7 +6,7 @@ import type { Agent } from './Agent';
 import { Subject } from 'rxjs';
 import type { ICapResponse } from './interfaces/ICapResponse';
 
-import * as LLSD from '@caspertech/llsd';
+import LLSD from '@caspertech/llsd';
 import * as url from 'url';
 import got from 'got';
 import { AssetType } from '../enums/AssetType';

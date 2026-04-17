@@ -1,7 +1,7 @@
 import Long from 'long';
 import type { Subscription } from 'rxjs';
 import { Subject } from 'rxjs';
-import * as xml2js from 'xml2js';
+import xml2js from 'xml2js';
 import * as zlib from 'zlib';
 import { FilterResponse } from '../enums/FilterResponse';
 import type { GlobalPosition } from './public/interfaces/GlobalPosition';
