@@ -13,5 +13,20 @@
     "nick": "aditi",
     "loginUri": "https://login.aditi.lindenlab.com/cgi-bin/login.cgi",
     "helperUri": "https://secondlife.aditi.lindenlab.com/helpers/"
+  },
+  {
+    "id": "login.osgrid.org",
+    "name": "OSGrid",
+    "nick": "osgrid",
+    "loginUri": "http://login.osgrid.org/",
+    "helperUri": "http://helper.osgrid.org/",
+    "webProfileUrl": "http://my.osgrid.org/?name=[AGENT_NAME]"
+  },
+  {
+    "id": "grid.wolfterritories.org",
+    "name": "Wolf Territories Grid",
+    "nick": "wolfterritories",
+    "loginUri": "http://grid.wolfterritories.org:8002/",
+    "helperUri": "http://helper.wolfterritories.org/"
   }
 ]

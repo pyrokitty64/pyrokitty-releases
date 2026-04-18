@@ -122,7 +122,6 @@ checks.json
 release.sh
 firestorm/build_portable.sh
 accounts.json
-/node-metaverse/dist
 /electron-ui/scripts/config.ts
 /electron-ui/viewer
 /electron-ui/release

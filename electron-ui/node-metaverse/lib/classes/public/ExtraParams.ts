@@ -1,4 +1,5 @@
 import { ExtraParamType } from '../../enums/ExtraParamType';
+import { SculptType } from '../../enums/SculptType';
 import { FlexibleData } from './FlexibleData';
 import { LightData } from './LightData';
 import { LightImageData } from './LightImageData';
@@ -75,6 +76,15 @@ export class ExtraParams
                     break;
                 case ExtraParamType.Sculpt:
                     ep.sculptData = new SculptData(buf, pos, paramLength);
+                    // OpenSim packs mesh objects in the Sculpt extra param with type=Mesh
+                    // (Second Life uses the dedicated Mesh extra param). Mirror to meshData
+                    // so consumers can check meshData uniformly across grids.
+                    if (ep.sculptData.type === SculptType.Mesh)
+                    {
+                        ep.meshData = new MeshData();
+                        ep.meshData.meshData = ep.sculptData.texture;
+                        ep.meshData.type = ep.sculptData.type;
+                    }
                     break;
                 case ExtraParamType.ExtendedMesh:
                     ep.extendedMeshData = new ExtendedMeshData(buf, pos, paramLength);

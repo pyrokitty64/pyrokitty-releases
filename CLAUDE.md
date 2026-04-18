@@ -39,12 +39,6 @@ PDB output: `firestorm/build-vc170-64/newview/Release/firestorm-bin.pdb`
 WER crash dumps: `%LOCALAPPDATA%\CrashDumps\`
 
 
-## Compile node-metaverse
-
-```bash
-cd ./electron-ui/node-metaverse && npm run build
-```
-
 ## Firestorm External Login Mode
 
 Launch viewer in external login mode (waits for session handoff via WebSocket):

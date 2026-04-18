@@ -536,22 +536,22 @@ func apply_face_materials(rsi, obj_uuid: String, faces: Array) -> void:
 		else:
 			mat = _make_placeholder_material(color, full_bright, double_sided)
 
-		if DebugLog.enabled("alpha"):
-			var rsi_sc: int = rsi.mesh.get_surface_count() if rsi.mesh else -1
-			var ami_sc: int = ami.mesh.get_surface_count() if (ami and ami.mesh) else -1
-			var rsi_will_set: bool = rsi.mesh != null and face_idx < rsi.mesh.get_surface_count()
-			var ami_will_set: bool = ami != null and ami.mesh != null and face_idx < ami.mesh.get_surface_count()
-			var mat_type: String = ""
-			if mat is StandardMaterial3D:
-				mat_type = "StdMat transp=%d albedo_a=%.3f" % [(mat as StandardMaterial3D).transparency, (mat as StandardMaterial3D).albedo_color.a]
-			elif mat is ShaderMaterial:
-				mat_type = "ShaderMat"
-			else:
-				mat_type = str(mat.get_class())
-			DebugLog.debug("alpha", "obj=%s face=%d tex=%s color=[%.2f,%.2f,%.2f,%.2f] resolved_alpha=%d attach=%s cached=%s key=%s rsi_sc=%d ami_sc=%d rsi_set=%s ami_set=%s mat=%s" % [
-				obj_uuid.substr(0, 8), face_idx, texture_id.substr(0, 8), color[0], color[1], color[2], color[3],
-				resolved_alpha, str(is_attachment), str(albedo_cached), mat_key.substr(0, 24),
-				rsi_sc, ami_sc, str(rsi_will_set), str(ami_will_set), mat_type])
+		# if DebugLog.enabled("alpha"):
+		# 	var rsi_sc: int = rsi.mesh.get_surface_count() if rsi.mesh else -1
+		# 	var ami_sc: int = ami.mesh.get_surface_count() if (ami and ami.mesh) else -1
+		# 	var rsi_will_set: bool = rsi.mesh != null and face_idx < rsi.mesh.get_surface_count()
+		# 	var ami_will_set: bool = ami != null and ami.mesh != null and face_idx < ami.mesh.get_surface_count()
+		# 	var mat_type: String = ""
+		# 	if mat is StandardMaterial3D:
+		# 		mat_type = "StdMat transp=%d albedo_a=%.3f" % [(mat as StandardMaterial3D).transparency, (mat as StandardMaterial3D).albedo_color.a]
+		# 	elif mat is ShaderMaterial:
+		# 		mat_type = "ShaderMat"
+		# 	else:
+		# 		mat_type = str(mat.get_class())
+		# 	DebugLog.debug("alpha", "obj=%s face=%d tex=%s color=[%.2f,%.2f,%.2f,%.2f] resolved_alpha=%d attach=%s cached=%s key=%s rsi_sc=%d ami_sc=%d rsi_set=%s ami_set=%s mat=%s" % [
+		# 		obj_uuid.substr(0, 8), face_idx, texture_id.substr(0, 8), color[0], color[1], color[2], color[3],
+		# 		resolved_alpha, str(is_attachment), str(albedo_cached), mat_key.substr(0, 24),
+		# 		rsi_sc, ami_sc, str(rsi_will_set), str(ami_will_set), mat_type])
 
 		if rsi.mesh and face_idx < rsi.mesh.get_surface_count():
 			rsi.set_surface_material(face_idx, mat)
@@ -604,13 +604,13 @@ func _get_or_create_material(key: String, texture_id: String, color: Array, full
 	var full_key: String = key
 
 	if sm.material_cache.has(full_key):
-		if DebugLog.enabled("alpha") and color[3] < 1.0:
-			var cached_mat: Material = sm.material_cache[full_key]
-			var cached_info: String = ""
-			if cached_mat is StandardMaterial3D:
-				var cm := cached_mat as StandardMaterial3D
-				cached_info = "transp=%d albedo_a=%.3f" % [cm.transparency, cm.albedo_color.a]
-			DebugLog.debug("alpha", "CACHE HIT full_key=%s color[3]=%.3f -> %s" % [full_key.substr(0, 30), color[3], cached_info])
+		# if DebugLog.enabled("alpha") and color[3] < 1.0:
+		# 	var cached_mat: Material = sm.material_cache[full_key]
+		# 	var cached_info: String = ""
+		# 	if cached_mat is StandardMaterial3D:
+		# 		var cm := cached_mat as StandardMaterial3D
+		# 		cached_info = "transp=%d albedo_a=%.3f" % [cm.transparency, cm.albedo_color.a]
+		# 	DebugLog.debug("alpha", "CACHE HIT full_key=%s color[3]=%.3f -> %s" % [full_key.substr(0, 30), color[3], cached_info])
 		return sm.material_cache[full_key]
 
 	# alpha_mode is already the resolved mode (blend→opaque promotion done by Electron)
