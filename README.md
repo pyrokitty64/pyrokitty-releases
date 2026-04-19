@@ -2,7 +2,7 @@
 
 Join us on the BonnieBots Discord at https://discord.gg/RRCUytaDH6
 
-An experimental Second Life / OpenSim viewer that replaces the traditional monolithic C++ viewer architecture with a multi-process stack: **Electron** for account management and UI, **Godot** for 3D rendering, and a heavily modified **Firestorm** as an alternative renderer. Also includes an MCP server so AI coding agents can log in and interact with the virtual world directly.
+An experimental Second Life / OpenSim viewer that replaces the traditional monolithic C++ viewer architecture with a multi-process stack: **Electron** for account management and UI, **Godot** for 3D rendering, and an experimental **Unreal Engine** renderer as an alternative. Also includes an MCP server so AI coding agents can log in and interact with the virtual world directly.
 
 <img width="3840" alt="image" src="https://github.com/user-attachments/assets/a24afc87-dc0e-4916-934e-e84644836ef5" />
 
@@ -156,7 +156,7 @@ In Electron code, use `pkDebug(tag, msg)` from `pk-debug.ts`. In GDScript, use `
 |-----------|-------------|
 | `electron-ui/` | Electron app — account management, login, UI shell, and the client-side protocol backend (node-metaverse). The brains of the operation. |
 | `godot-viewer/` | Godot 4.7 project — 3D rendering, avatar animation, prim meshing. Communicates with Electron over a local bridge. |
-| `firestorm/` | Heavily modified Firestorm viewer. Runs in "external login" mode, handing off its session to the Electron/Godot stack. Very experimental. |
+| `unreal-viewer/` | Unreal Engine renderer as an alternative to Godot. Very experimental. |
 | `sl-mcp/` | MCP server that gives AI agents (like Claude) direct control of a Second Life bot — chat, navigation, object manipulation, and more. |
 | `docs/` | Architecture docs, rendering notes, and research. |
 | `icons/` | App icons. |
@@ -164,11 +164,11 @@ In Electron code, use `pkDebug(tag, msg)` from `pk-debug.ts`. In GDScript, use `
 ## Architecture
 
 ```
-┌─────────────┐     WebSocket      ┌──────────────┐      WebSocket       ┌──────────────┐
-│  Firestorm  │ <────────────────> │  Electron UI │ <──────────────────> │ Godot Viewer │
-│  (C++ core) │                    │  (node-meta- │    (textures,        │  (3D render) │
-│             │                    │    verse)    │     meshes, anims)   │              │
-└─────────────┘                    └──────┬───────┘                      └──────────────┘
+┌──────────────┐     WebSocket      ┌──────────────┐     WebSocket      ┌──────────────┐
+│    Unreal    │ <────────────────> │  Electron UI │ <────────────────> │ Godot Viewer │
+│  (3D render) │    (alt renderer,  │  (node-meta- │   (textures,       │  (3D render) │
+│              │     experimental)  │    verse)    │    meshes, anims)  │              │
+└──────────────┘                    └──────┬───────┘                    └──────────────┘
                                           │
                                     ┌─────┴──────┐
                                     │ Voice Side-│
@@ -176,7 +176,7 @@ In Electron code, use `pkDebug(tag, msg)` from `pk-debug.ts`. In GDScript, use `
                                     └────────────┘
 ```
 
-Electron handles the SL protocol via **node-metaverse** (a TypeScript SL client library, bundled with heavy modification). It decodes textures, builds mesh data, manages animations, and streams everything to Godot for rendering. Firestorm is optional — it can hand off an authenticated session so you get the benefit of its mature UDP protocol stack.
+Electron handles the SL protocol via **node-metaverse** (a TypeScript SL client library, bundled with heavy modification). It decodes textures, builds mesh data, manages animations, and streams everything to Godot for rendering. An experimental Unreal Engine renderer is available as an alternative to Godot.
 
 ## SL-MCP: AI Bot Control
 
