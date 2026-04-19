@@ -2,7 +2,7 @@
 
 Join us on the BonnieBots Discord at https://discord.gg/RRCUytaDH6
 
-<img width="1501" height="809" alt="image" src="https://github.com/user-attachments/assets/c6062a1e-0b17-4f1d-aeaa-747915221fce" />
+<img width="3840" height="2126" alt="image" src="https://github.com/user-attachments/assets/a24afc87-dc0e-4916-934e-e84644836ef5" />
 
 An experimental Second Life / OpenSim viewer that replaces the traditional monolithic C++ viewer architecture with a multi-process stack: **Electron** for account management and UI, **Godot** for 3D rendering, and a heavily modified **Firestorm** as an alternative renderer. Also includes an MCP server so AI coding agents can log in and interact with the virtual world directly.
 
@@ -45,6 +45,7 @@ cd "$pyrodir"
 ./PyroKitty.sh
 ```
 
+<img width="1501" height="809" alt="image" src="https://github.com/user-attachments/assets/c6062a1e-0b17-4f1d-aeaa-747915221fce" />
 
 ## I want to build it
 
