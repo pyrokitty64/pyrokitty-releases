@@ -2,9 +2,9 @@
 
 Join us on the BonnieBots Discord at https://discord.gg/RRCUytaDH6
 
-<img width="3840" alt="image" src="https://github.com/user-attachments/assets/a24afc87-dc0e-4916-934e-e84644836ef5" />
-
 An experimental Second Life / OpenSim viewer that replaces the traditional monolithic C++ viewer architecture with a multi-process stack: **Electron** for account management and UI, **Godot** for 3D rendering, and a heavily modified **Firestorm** as an alternative renderer. Also includes an MCP server so AI coding agents can log in and interact with the virtual world directly.
+
+<img width="3840" alt="image" src="https://github.com/user-attachments/assets/a24afc87-dc0e-4916-934e-e84644836ef5" />
 
 <img width="1895" height="1001" alt="image" src="https://github.com/user-attachments/assets/5374815c-7b8f-43e0-9009-ada12c3b56ce" />
 
