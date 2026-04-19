@@ -168,11 +168,6 @@ fi
 echo "Step 1: Building Electron app..."
 cd "$ELECTRON_DIR"
 
-# 1a: Build node-metaverse (only if source changed)
-echo "  Building node-metaverse..."
-cd "$ELECTRON_DIR/node-metaverse" && npm install && cd "$ELECTRON_DIR"
-npm run build:metaverse
-
 # 1b: Build main process (only if source changed)
 echo "  Building main process..."
 npm run build:main

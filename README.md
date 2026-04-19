@@ -1,5 +1,7 @@
 # PyroKitty
 
+Join us on the BonnieBots Discord at https://discord.gg/RRCUytaDH6
+
 An experimental Second Life / OpenSim viewer that replaces the traditional monolithic C++ viewer architecture with a multi-process stack: **Electron** for account management and UI, **Godot** for 3D rendering, and a heavily modified **Firestorm** as an alternative renderer. Also includes an MCP server so AI coding agents can log in and interact with the virtual world directly.
 
 ## I just want to run it
