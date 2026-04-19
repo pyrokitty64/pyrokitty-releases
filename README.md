@@ -185,3 +185,6 @@ The `sl-mcp/` server exposes 36 tools across session management, chat, navigatio
 
 See [LICENSE](LICENSE). (It's chill.)
 
+<img width="1498" height="810" alt="image" src="https://github.com/user-attachments/assets/e17441c8-1e9c-49da-a570-024f97fa8f5f" />
+
+
