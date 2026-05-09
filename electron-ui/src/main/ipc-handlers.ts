@@ -64,6 +64,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return gridManager.getAllGrids();
   });
 
+  ipcMain.handle(IPC_CHANNELS.GRIDS_ADD_OR_UPDATE, async (_, loginUri: string) => {
+    return gridManager.addOrUpdateFromUri(loginUri);
+  });
+
   // Account handlers
   ipcMain.handle(IPC_CHANNELS.GET_ACCOUNTS, async () => {
     return accountManager.getAllAccounts();

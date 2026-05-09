@@ -26,6 +26,21 @@ export interface Grid {
   slurlBase?: string;
 }
 
+export type GridAddOrUpdateStatus =
+  | 'added'
+  | 'updated'
+  | 'unchanged'
+  | 'unchanged-stale'
+  | 'invalid-url'
+  | 'unreachable'
+  | 'bad-response';
+
+export interface GridAddOrUpdateResult {
+  status: GridAddOrUpdateStatus;
+  grid?: Grid;
+  error?: string;
+}
+
 // Connection states for dual-mode operation
 export type ConnectionState =
   | 'disconnected'
@@ -157,6 +172,7 @@ export interface SyncStatus {
 export const IPC_CHANNELS = {
   // Grid operations
   GET_GRIDS: 'grids:get',
+  GRIDS_ADD_OR_UPDATE: 'grids:add-or-update',
 
   // Account operations
   GET_ACCOUNTS: 'accounts:get',

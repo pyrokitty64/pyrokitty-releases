@@ -14,7 +14,7 @@ import { Account, IPC_CHANNELS } from '../shared/types';
 type View = 'account' | 'add-account';
 
 export const App: React.FC = () => {
-  const { grids } = useGrids();
+  const { grids, addOrUpdateGrid } = useGrids();
   const { accounts, addAccount, updateAccount, removeAccount, getAccount } = useAccounts();
   const { instances, launchViewer, launchFirestormForInstance, launchGodotViewerForInstance, launchUnrealViewerForInstance, stopViewer, getInstanceForAccount, isRunning } = useViewers();
 
@@ -176,6 +176,7 @@ export const App: React.FC = () => {
                 key="add-account"
                 grids={grids}
                 onSubmit={handleSaveAccount}
+                onAddOrUpdateGrid={addOrUpdateGrid}
                 onCancel={() => setCurrentView('account')}
                 error={null}
               />
